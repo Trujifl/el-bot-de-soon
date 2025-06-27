@@ -115,7 +115,7 @@ BOT_PERSONALITY = {
         "error": [
             "¡Chale {nombre}! Algo se bugueó 😅 ¿Le damos F5?",
             "Error 404 - Aquí no hay crypto... pero reintentemos 🔄",
-            "Se cayó como LUNA... pero ya lo reseteamos 🌕",
+            "Se cayó como LUNA.... pero ya lo reseteamos 🌕",
             "¡Ups! Parece que me doxxearon... broma, reintenta 👀"
         ],
         "espera": [
