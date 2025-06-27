@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-BOT DE TELEGRAM CON RESÚMENES Y COINGECKO API - VERSIÓN CORREGIDA
+BOT DE TELEGRAM CON RESÚMENES Y COINGECKO API - VERSIÓN 24/7 PARA RENDER
 """
 
 import os
@@ -10,9 +10,12 @@ import sys
 import logging
 import random
 import requests
+import threading
+import time
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from urllib.parse import urlparse
+from flask import Flask, jsonify
 
 # Configuración básica de logging
 logging.basicConfig(
@@ -20,6 +23,21 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Configuración de Flask para el health check
+app = Flask(__name__)
+
+@app.route('/health')
+def health_check():
+    return jsonify({"status": "ok", "bot": "active"}), 200
+
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "running",
+        "bot": "SoonBot",
+        "version": "8.4"
+    }), 200
 
 # Cargar variables de entorno
 try:
@@ -51,7 +69,7 @@ try:
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 except ImportError as e:
     logger.error(f"Error al importar dependencias: {e}")
-    logger.error("Instala las dependencias con: pip install python-telegram-bot openai python-dotenv requests beautifulsoup4")
+    logger.error("Instala las dependencias con: pip install python-telegram-bot openai python-dotenv requests beautifulsoup4 flask")
     sys.exit(1)
 
 # Configuración del bot
@@ -63,11 +81,16 @@ if not TOKEN:
     logger.error("TELEGRAM_TOKEN no está configurado")
     sys.exit(1)
 
+# Configuración para Render
+RENDER = os.getenv("RENDER", "false").lower() == "true"
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 10000))  # Render usa el puerto 10000 por defecto
+
 # Personalidad del bot
 BOT_PERSONALITY = {
     "nombre": "SoonBot",
     "emoji": "🚀",
-    "version": "8.2",
+    "version": "8.4",
     "tono": "pro-latino-relajado",
     "criptos_comunes": ["bitcoin", "ethereum", "binancecoin", "solana", "cardano", "ripple", "dogecoin"],
     "frases": {
@@ -79,7 +102,7 @@ BOT_PERSONALITY = {
         ],
         "despedidas": [
             "¡Listo socio! Cualquier cosa me chiflas 👌",
-            "Nos vemos {nombre}, no te quedes ghosteando 👻",
+            "Nos vemos {nombre}, no te quedas ghosteando 👻",
             "Hasta luego, ¡que no se te caiga el exchange! 😎",
             "Chao pescao, éxito en esas inversiones 🐟"
         ],
@@ -100,7 +123,6 @@ BOT_PERSONALITY = {
             "Espera espera, como en ICO... cargando 📈",
             "Mándame un memecoin mientras esperas... trabajando 🐶",
             "Más rápido que Binance en caída... pero dame un toque ⏳"
-     
         ]
     },
     "caracteristicas": {
@@ -113,6 +135,20 @@ BOT_PERSONALITY = {
 
 # Diccionario global para almacenar posts pendientes
 PENDING_POSTS: Dict[int, Dict] = {}
+
+# Sistema de keep-alive para Render
+def keep_alive():
+    while True:
+        try:
+            if RENDER and WEBHOOK_URL:
+                requests.get(f"{WEBHOOK_URL}/health")
+                logger.info("Keep-alive ping enviado")
+        except Exception as e:
+            logger.warning(f"Error en keep-alive: {e}")
+        time.sleep(300)  # Ping cada 5 minutos (300 segundos)
+
+if RENDER:
+    threading.Thread(target=keep_alive, daemon=True).start()
 
 class CoinGeckoAPI:
     @staticmethod
@@ -615,9 +651,39 @@ def setup_bot() -> Application:
 def main() -> None:
     """Función principal"""
     try:
-        logger.info(f"Iniciando {BOT_PERSONALITY['nombre']}...")
-        bot = setup_bot()
-        bot.run_polling()
+        logger.info(f"Iniciando {BOT_PERSONALITY['nombre']} v{BOT_PERSONALITY['version']}...")
+        
+        if RENDER:
+            logger.info("Modo Render activado - Configurando webhook...")
+            from threading import Thread
+            from waitress import serve
+            
+            # Iniciar Flask en un hilo separado
+            flask_thread = Thread(target=lambda: serve(app, host="0.0.0.0", port=5000))
+            flask_thread.daemon = True
+            flask_thread.start()
+            
+            # Configurar el bot de Telegram
+            bot = setup_bot()
+            
+            async def startup():
+                await bot.bot.set_webhook(
+                    url=f"{WEBHOOK_URL}/{TOKEN}",
+                    drop_pending_updates=True
+                )
+                logger.info(f"Webhook configurado en {WEBHOOK_URL}")
+            
+            bot.run_webhook(
+                listen="0.0.0.0",
+                port=PORT,
+                webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
+                startup=startup
+            )
+        else:
+            logger.info("Modo local activado - Usando polling...")
+            bot = setup_bot()
+            bot.run_polling()
+            
     except Exception as e:
         logger.error(f"Error: {e}")
         sys.exit(1)
