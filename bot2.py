@@ -115,7 +115,7 @@ BOT_PERSONALITY = {
         "error": [
             "¡Chale {nombre}! Algo se bugueó 😅 ¿Le damos F5?",
             "Error 404 - Aquí no hay crypto... pero reintentemos 🔄",
-            "Se cayó como LUNA.... pero ya lo reseteamos 🌕",
+            "Se cayó como LUNA... pero ya lo reseteamos 🌕",
             "¡Ups! Parece que me doxxearon... broma, reintenta 👀"
         ],
         "espera": [
@@ -666,18 +666,21 @@ def main() -> None:
             # Configurar el bot de Telegram
             bot = setup_bot()
             
-            async def startup():
-                await bot.bot.set_webhook(
+            async def startup(application):
+                await application.bot.set_webhook(
                     url=f"{WEBHOOK_URL}/{TOKEN}",
                     drop_pending_updates=True
                 )
-                logger.info(f"Webhook configurado en {WEBHOOK_URL}")
+                logger.info(f"Webhook configurado en {WEBHOOK_URL}/{TOKEN}")
             
+            # Configuración corregida del webhook
             bot.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
-                webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
-                startup=startup
+                web_app_url=f"{WEBHOOK_URL}/{TOKEN}",
+                secret_token='SECRET_TOKEN_OPCIONAL',
+                drop_pending_updates=True,
+                on_startup=startup
             )
         else:
             logger.info("Modo local activado - Usando polling...")
