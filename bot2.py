@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-BOT DE TELEGRAM CON RESÚMENES Y COINGECKO API - VERSIÓN 24/7 PARA RENDER
+BOT DE TELEGRAM CON RESÚMENES Y COINGECKO API - VERSIÓN 24/7 PARA RENDER (CORREGIDO)
 """
 
 import os
@@ -81,9 +81,9 @@ if not TOKEN:
     logger.error("TELEGRAM_TOKEN no está configurado")
     sys.exit(1)
 
-# Configuración para Render
+# Configuración para Render (CORREGIDO)
 RENDER = os.getenv("RENDER", "false").lower() == "true"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://el-bot-de-soon.onrender.com")  # Tu dominio en Render
 PORT = int(os.getenv("PORT", 10000))  # Render usa el puerto 10000 por defecto
 
 # Personalidad del bot
@@ -136,11 +136,11 @@ BOT_PERSONALITY = {
 # Diccionario global para almacenar posts pendientes
 PENDING_POSTS: Dict[int, Dict] = {}
 
-# Sistema de keep-alive para Render
+# Sistema de keep-alive para Render (CORREGIDO)
 def keep_alive():
     while True:
         try:
-            if RENDER and WEBHOOK_URL:
+            if RENDER:
                 requests.get(f"{WEBHOOK_URL}/health")
                 logger.info("Keep-alive ping enviado")
         except Exception as e:
@@ -649,46 +649,45 @@ def setup_bot() -> Application:
     return app
 
 def main() -> None:
-    """Función principal"""
+    """Función principal CORREGIDA para Render"""
     try:
         logger.info(f"Iniciando {BOT_PERSONALITY['nombre']} v{BOT_PERSONALITY['version']}...")
         
+        bot = setup_bot()
+        
         if RENDER:
             logger.info("Modo Render activado - Configurando webhook...")
-            from threading import Thread
-            from waitress import serve
             
-            # Iniciar Flask en un hilo separado
-            flask_thread = Thread(target=lambda: serve(app, host="0.0.0.0", port=5000))
-            flask_thread.daemon = True
+            # Iniciar Flask en un hilo separado (para health checks)
+            flask_thread = threading.Thread(
+                target=app.run,
+                kwargs={"host": "0.0.0.0", "port": 5000},
+                daemon=True
+            )
             flask_thread.start()
             
-            # Configurar el bot de Telegram
-            bot = setup_bot()
-            
-            async def startup(application):
-                await application.bot.set_webhook(
+            # Configuración CORREGIDA del webhook (parámetro webhook_url)
+            async def on_startup(app):
+                await bot.bot.set_webhook(
                     url=f"{WEBHOOK_URL}/{TOKEN}",
                     drop_pending_updates=True
                 )
                 logger.info(f"Webhook configurado en {WEBHOOK_URL}/{TOKEN}")
             
-            # Configuración corregida del webhook
             bot.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
-                web_app_url=f"{WEBHOOK_URL}/{TOKEN}",
+                webhook_url=f"{WEBHOOK_URL}/{TOKEN}",  # ✅ Parámetro clave corregido
                 secret_token='SECRET_TOKEN_OPCIONAL',
                 drop_pending_updates=True,
-                on_startup=startup
+                on_startup=on_startup
             )
         else:
             logger.info("Modo local activado - Usando polling...")
-            bot = setup_bot()
             bot.run_polling()
             
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.error(f"Error fatal: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
