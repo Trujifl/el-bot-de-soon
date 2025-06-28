@@ -98,7 +98,7 @@ BOT_PERSONALITY = {
             "¡Epa {nombre}! ¿como anda, todo bien? 👊", 
             "¡Buenaas {nombre}! ¿En qué te ayudo? 🔥",
             "¡Buenas crack! Dime cómo colaboramos hoy 💼",
-            "¡que pasaa {nombre}! Listo para lo que necesites ⚡"
+            "¡que pasaaa {nombre}! Listo para lo que necesites ⚡"
         ],
         "despedidas": [
             "¡Listo socio! Cualquier cosa me chiflas 👌",
