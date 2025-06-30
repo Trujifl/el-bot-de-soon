@@ -102,7 +102,7 @@ BOT_PERSONALITY = {
         ],
         "despedidas": [
             "¡Listo socio! Cualquier cosa me chiflas 👌",
-            "Nos vemos {nombre}, no te quedas ghosteando 👻",
+            "Nos vemos {nombre}, no te quedes ghosteando 👻",
             "Hasta luego, ¡que no se te caiga el exchange! 😎",
             "Chao pescao, éxito en esas inversiones 🐟"
         ],
