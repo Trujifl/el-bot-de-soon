@@ -785,26 +785,25 @@ def main() -> None:
             flask_thread.start()
             
             # Configuración del webhook
-            async def on_startup(app):
+            async def post_init(bot):
                 await bot.bot.set_webhook(
                     url=f"{WEBHOOK_URL}/{TOKEN}",
                     drop_pending_updates=True
                 )
                 logger.info(f"Webhook configurado en {WEBHOOK_URL}/{TOKEN}")
             
-            bot.post_init = on_startup
-
             bot.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
                 webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token='SECRET_TOKEN_OPCIONAL',
                 drop_pending_updates=True,
+                post_init=post_init
                 
             )
         else:
             logger.info("Modo local activado - Usando polling...")
-            bot.run_polling()
+            app.run_polling()
             
     except Exception as e:
         logger.error(f"Error fatal: {e}")
