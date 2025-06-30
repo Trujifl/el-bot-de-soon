@@ -771,39 +771,39 @@ def main() -> None:
     try:
         logger.info(f"Iniciando {BOT_PERSONALITY['nombre']} v{BOT_PERSONALITY['version']}...")
         
-        bot = setup_bot()
+        application = setup_bot()  # Usamos la aplicación ya configurada
         
         if RENDER:
             logger.info("Modo Render activado - Configurando webhook...")
             
-            # Iniciar Flask en un hilo separado (para health checks)
-            flask_thread = threading.Thread(
+            # 1. Health checks en puerto 5000 (requerido por Render)
+            threading.Thread(
                 target=app.run,
                 kwargs={"host": "0.0.0.0", "port": 5000},
                 daemon=True
-            )
-            flask_thread.start()
+            ).start()
             
-            # Configuración del webhook
-            async def post_init(bot):
-                await bot.bot.set_webhook(
+            # 2. Configuración específica para webhooks
+            async def post_init(application: Application):
+                await application.bot.set_webhook(
                     url=f"{WEBHOOK_URL}/{TOKEN}",
+                    secret_token='SECRET_TOKEN_OPCIONAL',
                     drop_pending_updates=True
                 )
                 logger.info(f"Webhook configurado en {WEBHOOK_URL}/{TOKEN}")
             
-            bot.run_webhook(
+            # 3. Ejecutar webhook
+            application.run_webhook(
                 listen="0.0.0.0",
-                port=PORT,
+                port=10000,  # Puerto diferente al de Flask
                 webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token='SECRET_TOKEN_OPCIONAL',
                 drop_pending_updates=True,
                 post_init=post_init
-                
             )
         else:
             logger.info("Modo local activado - Usando polling...")
-            app.run_polling()
+            application.run_polling()
             
     except Exception as e:
         logger.error(f"Error fatal: {e}")
