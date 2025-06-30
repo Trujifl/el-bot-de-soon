@@ -792,13 +792,15 @@ def main() -> None:
                 )
                 logger.info(f"Webhook configurado en {WEBHOOK_URL}/{TOKEN}")
             
+            bot.post_init = on_startup
+
             bot.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
                 webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token='SECRET_TOKEN_OPCIONAL',
                 drop_pending_updates=True,
-                on_startup=on_startup
+                
             )
         else:
             logger.info("Modo local activado - Usando polling...")
