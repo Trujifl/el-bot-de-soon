@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-BOT DE TELEGRAM CON RESÚMENES Y COINGECKO API - VERSIÓN 24/7 PARA RENDER (CORREGIDO)
+BOT DE TELEGRAM SIMPLIFICADO - VERSIÓN 9.4
 """
 
 import os
@@ -36,7 +36,7 @@ def home():
     return jsonify({
         "status": "running",
         "bot": "SoonBot",
-        "version": "8.4"
+        "version": "9.4"
     }), 200
 
 # Cargar variables de entorno
@@ -81,16 +81,16 @@ if not TOKEN:
     logger.error("TELEGRAM_TOKEN no está configurado")
     sys.exit(1)
 
-# Configuración para Render (CORREGIDO)
+# Configuración para Render
 RENDER = os.getenv("RENDER", "false").lower() == "true"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://el-bot-de-soon.onrender.com")  # Tu dominio en Render
-PORT = int(os.getenv("PORT", 10000))  # Render usa el puerto 10000 por defecto
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://el-bot-de-soon.onrender.com")
+PORT = int(os.getenv("PORT", 10000))
 
 # Personalidad del bot
 BOT_PERSONALITY = {
     "nombre": "SoonBot",
     "emoji": "🚀",
-    "version": "8.4",
+    "version": "9.4",
     "tono": "pro-latino-relajado",
     "criptos_comunes": ["bitcoin", "ethereum", "binancecoin", "solana", "cardano", "ripple", "dogecoin"],
     "frases": {
@@ -136,7 +136,7 @@ BOT_PERSONALITY = {
 # Diccionario global para almacenar posts pendientes
 PENDING_POSTS: Dict[int, Dict] = {}
 
-# Sistema de keep-alive para Render (CORREGIDO)
+# Sistema de keep-alive para Render
 def keep_alive():
     while True:
         try:
@@ -150,11 +150,49 @@ def keep_alive():
 if RENDER:
     threading.Thread(target=keep_alive, daemon=True).start()
 
+class CryptoIntentClassifier:
+    @staticmethod
+    def classify_intent(text: str) -> str:
+        """Clasifica la intención del mensaje del usuario"""
+        text = text.lower()
+        
+        # Detección de saludos
+        if any(greeting in text for greeting in ["hola", "buenas", "wenas", "hi", "hello"]):
+            return "saludo"
+            
+        # Detección de consultas de precio
+        price_terms = ["precio", "valor", "cotización", "cuánto está", "cómo está", "cuanto vale", "price", "value"]
+        if any(term in text for term in price_terms):
+            return "precio"
+            
+        # Detección de consultas de inversión
+        investment_terms = ["invertir", "comprar", "vender", "inversión", "investment", "trading", "operar"]
+        if any(term in text for term in investment_terms):
+            return "inversion"
+            
+        # Detección de consultas de estado de mercado
+        market_terms = ["cómo va", "que tal", "estado del mercado", "tendencia", "análisis", "predicción"]
+        if any(term in text for term in market_terms):
+            return "mercado"
+            
+        # Detección de solicitudes de ayuda
+        help_terms = ["ayuda", "help", "qué puedes hacer", "comandos"]
+        if any(term in text for term in help_terms):
+            return "ayuda"
+            
+        # Detección de solicitudes de resumen
+        summary_terms = ["resumen", "resumir", "sumarizar", "summary"]
+        if any(term in text for term in summary_terms):
+            return "resumen"
+            
+        return "otro"
+
 class CoinGeckoAPI:
     @staticmethod
     def obtener_precio(cripto_id: str) -> Optional[Dict]:
         """Obtiene precio actual desde CoinGecko"""
         try:
+            logger.info(f"Buscando precio para: {cripto_id}")
             cripto_id = cripto_id.lower()
             endpoint = f"{COINGECKO_API}/coins/{cripto_id}"
             params = {
@@ -344,9 +382,37 @@ persona = PersonalidadBot()
 post_manager = PostManager()
 coingecko = CoinGeckoAPI()
 resumen_manager = ResumenManager()
+intent_classifier = CryptoIntentClassifier()
+
+async def detectar_cripto(texto: str) -> Optional[str]:
+    """Detecta menciones de criptomonedas comunes con alias"""
+    texto = texto.lower()
+    
+    # Mapeo de alias comunes
+    alias_criptos = {
+        "btc": "bitcoin",
+        "eth": "ethereum",
+        "bnb": "binancecoin",
+        "sol": "solana",
+        "ada": "cardano",
+        "xrp": "ripple",
+        "doge": "dogecoin"
+    }
+    
+    # Buscar coincidencias exactas
+    for cripto in BOT_PERSONALITY["criptos_comunes"]:
+        if cripto in texto:
+            return cripto
+    
+    # Buscar por alias
+    for alias, cripto in alias_criptos.items():
+        if alias in texto:
+            return cripto
+    
+    return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Manejador del comando /start"""
+    """Manejador del comando /start con el mensaje simplificado"""
     try:
         user_name = update.effective_user.first_name
         saludo = random.choice(BOT_PERSONALITY["frases"]["saludos"]).format(nombre=user_name)
@@ -535,121 +601,173 @@ async def resumen_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(random.choice(BOT_PERSONALITY["frases"]["error"]))
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Manejador para interacciones con botones"""
+    """Manejador para interacciones con botones (solo para aprobación de posts)"""
     query = update.callback_query
     await query.answer()
     
     try:
-        action, post_id = query.data.split("_")
-        post_id = int(post_id)
-        
-        if post_id not in PENDING_POSTS:
-            await query.edit_message_text("⚠️ Este post ya fue procesado")
-            return
+        if query.data.startswith("approve_") or query.data.startswith("reject_"):
+            action, post_id = query.data.split("_")
+            post_id = int(post_id)
             
-        user_name = PENDING_POSTS[post_id]["user_name"]
-        
-        if action == "approve":
-            success = await post_manager.publicar_en_canal(PENDING_POSTS[post_id])
-            if success:
+            if post_id not in PENDING_POSTS:
+                await query.edit_message_text("⚠️ Este post ya fue procesado")
+                return
+                
+            user_name = PENDING_POSTS[post_id]["user_name"]
+            
+            if action == "approve":
+                success = await post_manager.publicar_en_canal(PENDING_POSTS[post_id])
+                if success:
+                    await context.bot.send_message(
+                        chat_id=PENDING_POSTS[post_id]["user_id"],
+                        text=f"¡Tu post '{PENDING_POSTS[post_id]['titulo']}' ha sido aprobado y publicado! 🎉",
+                        parse_mode="HTML"
+                    )
+                    await query.edit_message_text(f"✅ Post publicado por {user_name}")
+                    PENDING_POSTS[post_id]["status"] = "approved"
+                else:
+                    await query.edit_message_text("⚠️ Error al publicar")
+                    
+            elif action == "reject":
                 await context.bot.send_message(
                     chat_id=PENDING_POSTS[post_id]["user_id"],
-                    text=f"¡Tu post '{PENDING_POSTS[post_id]['titulo']}' ha sido aprobado y publicado! 🎉",
+                    text=f"Tu post '{PENDING_POSTS[post_id]['titulo']}' no fue aprobado esta vez. "
+                         "Puedes editarlo y volver a enviarlo.",
                     parse_mode="HTML"
                 )
-                await query.edit_message_text(f"✅ Post publicado por {user_name}")
-                PENDING_POSTS[post_id]["status"] = "approved"
-            else:
-                await query.edit_message_text("⚠️ Error al publicar")
-                
-        elif action == "reject":
-            await context.bot.send_message(
-                chat_id=PENDING_POSTS[post_id]["user_id"],
-                text=f"Tu post '{PENDING_POSTS[post_id]['titulo']}' no fue aprobado esta vez. "
-                     "Puedes editarlo y volver a enviarlo.",
-                parse_mode="HTML"
-            )
-            await query.edit_message_text(f"❌ Post rechazado ({user_name})")
-            PENDING_POSTS[post_id]["status"] = "rejected"
+                await query.edit_message_text(f"❌ Post rechazado ({user_name})")
+                PENDING_POSTS[post_id]["status"] = "rejected"
             
     except Exception as e:
         logger.error(f"Error en button_handler: {e}")
-        await query.edit_message_text("⚠️ Error al procesar esta acción")
+        await query.edit_message_text(random.choice(BOT_PERSONALITY["frases"]["error"]))
 
 async def mensaje_generico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Manejador para mensajes no comandos"""
+    """Manejador simplificado para mensajes no comandos"""
     try:
         texto = update.message.text
         user_name = update.effective_user.first_name
         
         if len(texto) < 3 or texto.startswith('/'):
             return
+            
+        # Clasificar la intención del mensaje
+        intent = intent_classifier.classify_intent(texto)
         
-        # Detección de criptomonedas
+        # Detectar si menciona alguna criptomoneda
         cripto = await detectar_cripto(texto)
-        if cripto:
-            await update.message.reply_text(
-                f"🔍 Veo que mencionas {cripto}. Dame un segundo...",
-                reply_to_message_id=update.message.message_id
-            )
+        
+        # Respuestas basadas en la intención clasificada
+        if intent == "saludo":
+            respuesta = random.choice(BOT_PERSONALITY["frases"]["saludos"]).format(nombre=user_name)
+            await update.message.reply_text(respuesta)
+            return
+            
+        elif intent == "precio" and cripto:
             context.args = [cripto]
             await precio_cripto(update, context)
             return
-        
-        # Respuestas predefinidas
+            
+        elif intent == "inversion":
+            respuesta = (
+                f"📈 <b>Consejos para invertir en {cripto if cripto else 'criptomonedas'}:</b>\n\n"
+                "1. <b>Investiga primero</b>: Entiende el proyecto y su tecnología\n"
+                "2. <b>Diversifica</b>: No pongas todos tus fondos en un solo activo\n"
+                "3. <b>Gestión de riesgo</b>: Solo invierte lo que puedas permitirte perder\n"
+                "4. <b>Estrategias</b>: Considera DCA (compra periódica) para reducir volatilidad\n\n"
+                "Si necesitas más detalles, dime exactamente qué información requieres."
+            )
+            await update.message.reply_text(respuesta, parse_mode="HTML")
+            return
+            
+        elif intent == "mercado":
+            # Respuesta simplificada sobre el mercado
+            respuesta = (
+                "📊 <b>Para información sobre el mercado:</b>\n\n"
+                "Puedes usar:\n"
+                "/precio bitcoin - Para ver el precio de BTC\n"
+                "/precio ethereum - Para ver el precio de ETH\n\n"
+                "O dime exactamente qué información necesitas sobre el mercado."
+            )
+            await update.message.reply_text(respuesta, parse_mode="HTML")
+            return
+            
+        elif intent == "ayuda":
+            await start(update, context)
+            return
+            
+        elif intent == "resumen":
+            await update.message.reply_text(
+                "📝 <b>Para resumir contenido:</b>\n\n"
+                "Usa:\n"
+                "/resumen_texto [tu texto]\n"
+                "o\n"
+                "/resumen_url [URL]",
+                parse_mode="HTML"
+            )
+            return
+            
+        # Si menciona una cripto pero no se detectó intención clara
+        elif cripto:
+            respuesta = (
+                f"🔍 Veo que mencionas {cripto}. Puedo ayudarte con:\n\n"
+                "• Precio actual: /precio {cripto}\n"
+                "• Información general\n"
+                "• Consejos de inversión\n\n"
+                "Dime exactamente qué necesitas saber."
+            )
+            await update.message.reply_text(respuesta)
+            return
+            
+        # Respuesta genérica
         respuesta_predefinida = persona.generar_respuesta(texto, user_name)
         if respuesta_predefinida:
             await update.message.reply_text(respuesta_predefinida)
             return
-        
-        # Respuesta con IA (opcional)
+            
+        # Respuesta con IA si está configurada
         if os.getenv("OPENAI_API_KEY"):
             await update.message.reply_chat_action(action="typing")
             respuesta_ia = await persona.generar_respuesta_ia(texto, user_name)
             if respuesta_ia:
                 await update.message.reply_text(respuesta_ia)
                 return
-        
+                
         # Respuesta por defecto
         await update.message.reply_text(
-            f"¿Te gustaría saber el precio de alguna criptomoneda, {user_name}? "
-            f"Prueba con '/precio bitcoin' o menciona alguna en tu mensaje.",
-            reply_to_message_id=update.message.message_id
+            f"{user_name}, ¿quieres información sobre precios de criptomonedas? "
+            "Prueba con /precio bitcoin o dime en qué puedo ayudarte.",
+            parse_mode="HTML"
         )
             
     except Exception as e:
         logger.error(f"Error en mensaje_generico: {e}")
         await update.message.reply_text(random.choice(BOT_PERSONALITY["frases"]["error"]))
 
-async def detectar_cripto(texto: str) -> Optional[str]:
-    """Detecta menciones de criptomonedas comunes"""
-    texto = texto.lower()
-    for cripto in BOT_PERSONALITY["criptos_comunes"]:
-        if cripto in texto:
-            return cripto
-    return None
-
 def setup_bot() -> Application:
     """Configuración del bot"""
-    app = Application.builder().token(TOKEN).build()
+    application = Application.builder().token(TOKEN).build()
     
     # Handlers de comandos
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("precio", precio_cripto))
-    app.add_handler(CommandHandler("post", post_handler))
-    app.add_handler(CommandHandler("help", start))
-    app.add_handler(CommandHandler("resumen_texto", resumen_texto))
-    app.add_handler(CommandHandler("resumen_url", resumen_url))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("precio", precio_cripto))
+    application.add_handler(CommandHandler("post", post_handler))
+    application.add_handler(CommandHandler("help", start))
+    application.add_handler(CommandHandler("resumen_texto", resumen_texto))
+    application.add_handler(CommandHandler("resumen_url", resumen_url))
     
-    # Handlers de interacción
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensaje_generico))
+    # Handlers de interacción (solo para aprobación de posts)
+    application.add_handler(CallbackQueryHandler(button_handler))
+    
+    # Handler para mensajes genéricos
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensaje_generico))
     
     logger.info(f"✅ {BOT_PERSONALITY['nombre']} v{BOT_PERSONALITY['version']} listo")
-    return app
+    return application
 
 def main() -> None:
-    """Función principal CORREGIDA para Render"""
+    """Función principal para Render"""
     try:
         logger.info(f"Iniciando {BOT_PERSONALITY['nombre']} v{BOT_PERSONALITY['version']}...")
         
@@ -666,7 +784,7 @@ def main() -> None:
             )
             flask_thread.start()
             
-            # Configuración CORREGIDA del webhook (parámetro webhook_url)
+            # Configuración del webhook
             async def on_startup(app):
                 await bot.bot.set_webhook(
                     url=f"{WEBHOOK_URL}/{TOKEN}",
@@ -677,7 +795,7 @@ def main() -> None:
             bot.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
-                webhook_url=f"{WEBHOOK_URL}/{TOKEN}",  # ✅ Parámetro clave corregido
+                webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token='SECRET_TOKEN_OPCIONAL',
                 drop_pending_updates=True,
                 on_startup=on_startup
