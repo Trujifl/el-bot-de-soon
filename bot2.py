@@ -768,19 +768,25 @@ def setup_bot() -> Application:
 
 def main() -> None:
     try:
-        application = setup_bot()
+        # 1. Configuración inicial
+        application = Application.builder().token(TOKEN).build()
+        
+        # 2. Registra todos los handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("precio", precio_cripto))
+        # ... añade todos tus otros handlers aquí ...
         
         if RENDER:
-            logger.info("Iniciando en modo webhook...")
+            logger.info("Modo Render - Configurando webhook...")
             
-            # Health checks en puerto separado
+            # 3. Health check en puerto 5000
             threading.Thread(
                 target=app.run,
                 kwargs={"host": "0.0.0.0", "port": 5000},
                 daemon=True
             ).start()
 
-            # Configuración del webhook
+            # 4. Configuración del webhook (PTB v20+)
             async def setup_webhook():
                 await application.bot.set_webhook(
                     url=f"{WEBHOOK_URL}/{TOKEN}",
@@ -789,16 +795,15 @@ def main() -> None:
                 )
                 logger.info(f"Webhook configurado en {WEBHOOK_URL}/{TOKEN}")
 
-            # Ejecutar aplicación
+            # 5. Ejecutar aplicación
             application.run_webhook(
                 listen="0.0.0.0",
                 port=10000,
-                webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token='SECRET_TOKEN_OPCIONAL',
                 drop_pending_updates=True
             )
         else:
-            logger.info("Iniciando en modo polling...")
+            logger.info("Modo local - Usando polling...")
             application.run_polling()
 
     except Exception as e:
