@@ -767,44 +767,40 @@ def setup_bot() -> Application:
     return application
 
 def main() -> None:
-    """Función principal para Render"""
     try:
-        logger.info(f"Iniciando {BOT_PERSONALITY['nombre']} v{BOT_PERSONALITY['version']}...")
-        
-        application = setup_bot()  # Usamos la aplicación ya configurada
+        application = setup_bot()
         
         if RENDER:
-            logger.info("Modo Render activado - Configurando webhook...")
+            logger.info("Iniciando en modo webhook...")
             
-            # 1. Health checks en puerto 5000 (requerido por Render)
+            # Health checks en puerto separado
             threading.Thread(
                 target=app.run,
                 kwargs={"host": "0.0.0.0", "port": 5000},
                 daemon=True
             ).start()
-            
-            # 2. Configuración específica para webhooks
-            async def post_init(application: Application):
+
+            # Configuración del webhook
+            async def setup_webhook():
                 await application.bot.set_webhook(
                     url=f"{WEBHOOK_URL}/{TOKEN}",
                     secret_token='SECRET_TOKEN_OPCIONAL',
                     drop_pending_updates=True
                 )
                 logger.info(f"Webhook configurado en {WEBHOOK_URL}/{TOKEN}")
-            
-            # 3. Ejecutar webhook
+
+            # Ejecutar aplicación
             application.run_webhook(
                 listen="0.0.0.0",
-                port=10000,  # Puerto diferente al de Flask
+                port=10000,
                 webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token='SECRET_TOKEN_OPCIONAL',
-                drop_pending_updates=True,
-                post_init=post_init
+                drop_pending_updates=True
             )
         else:
-            logger.info("Modo local activado - Usando polling...")
+            logger.info("Iniciando en modo polling...")
             application.run_polling()
-            
+
     except Exception as e:
         logger.error(f"Error fatal: {e}")
         sys.exit(1)
