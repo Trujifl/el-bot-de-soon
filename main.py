@@ -55,12 +55,13 @@ async def run_bot():
         # 4. Modo de ejecución
         if RENDER:
             logger.info("Modo Render - Configurando webhook...")
-            await application.run_webhook(
+            await application.start_webhook(
                 listen="0.0.0.0",
                 port=PORT,
                 webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token=os.getenv("WEBHOOK_SECRET", "SECRET_TOKEN")
             )
+            await asyncio.Event().wait()  # Mantiene el bot corriendo
         else:
             logger.info("Modo local - Usando polling...")
             await application.run_polling()
@@ -69,5 +70,8 @@ async def run_bot():
         logger.error(f"Error al iniciar el bot: {e}")
         raise
 
-if __name__ == "__main__":
+def main():
     asyncio.run(run_bot())
+
+if __name__ == "__main__":
+    main()
