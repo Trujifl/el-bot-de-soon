@@ -1,0 +1,33 @@
+[project]
+name = "telegram-bot-app"
+version = "0.1.0"
+description = "Un bot de Telegram usando Flask y python-telegram-bot"
+authors = [
+    { name="Jorge Trujillo", email="trujicrypto@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-telegram-bot[webhooks]==20.7",
+    "flask==2.3.2",
+    "requests==2.31.0",
+    "python-dotenv==1.0.0",
+    "openai>=1.0.0",
+    "beautifulsoup4==4.12.0"
+]
+
+[dependency-groups]
+dev = ["ruff", "isort"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[project.scripts]
+telegram-bot = "bot:main"
+
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
