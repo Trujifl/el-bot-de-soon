@@ -1,8 +1,9 @@
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from telegram.ext import Application, MessageHandler, CommandHandler, filters, CallbackQueryHandler
+import asyncio
+from threading import Thread
+from flask import Flask, jsonify
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 from telegram import BotCommand
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
@@ -13,16 +14,25 @@ from src.config import (
     BotMeta,
     BotPersonality
 )
-from src.handlers.base import start, help_command, mensaje_generico, setup_base_handlers
+from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 
-post_handler = PostHandler()
-resume_handler = ResumeHandler()
+# Inicialización de Flask
+app = Flask(__name__)
 
+# Endpoint básico para verificar que el bot está en línea
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "running",
+        "bot": BotMeta.NAME,
+        "version": BotMeta.VERSION,
+        "mode": "webhook" if RENDER else "polling"
+    }), 200
 
-
+# Configuración de comandos del bot
 async def set_bot_commands(application):
     """Configura los comandos visibles en la interfaz de Telegram"""
     commands = [
@@ -35,40 +45,70 @@ async def set_bot_commands(application):
     ]
     await application.bot.set_my_commands(commands)
 
-def main():
+# Función para ejecutar el bot
+async def run_bot():
     try:
         # 1. Inicialización del bot
         application = Application.builder().token(TOKEN).build()
         
         # 2. Configuración de handlers
         setup_base_handlers(application)
+        
+        # Handlers específicos
+        post_handler = PostHandler()
+        resume_handler = ResumeHandler()
+        
         application.add_handler(CommandHandler("precio", precio_cripto))
         application.add_handler(CommandHandler("post", post_handler.handle))
         application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
         application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
-        application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+        application.add_handler(CallbackQueryHandler(
+            post_handler.handle_confirmation, 
+            pattern="^(confirm|cancel)_post_"
+        ))
         
         # 3. Configurar comandos visibles
-        application.post_init = set_bot_commands
+        await set_bot_commands(application)
         
         logger.info(f"[{BotMeta.NAME} v{BotMeta.VERSION} iniciando...]")
         
         # 4. Modo de ejecución
         if RENDER:
             logger.info("Modo Render - Configurando webhook...")
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=PORT,
-                webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
+            await application.bot.set_webhook(
+                url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token=os.getenv("WEBHOOK_SECRET", "SECRET_TOKEN")
             )
+            await application.run_polling()  # Mantiene el bot activo
         else:
             logger.info("Modo local - Usando polling...")
-            application.run_polling()
+            await application.run_polling()
             
     except Exception as e:
-        logger.error(f"Error al iniciar el bot: {e}")
+        logger.error(f"Error en el bot: {e}")
         raise
+
+# Función para ejecutar Flask
+def run_flask():
+    app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
+
+# Punto de entrada principal
+def main():
+    try:
+        if RENDER:
+            # Inicia Flask en un hilo separado para Render
+            flask_thread = Thread(target=run_flask)
+            flask_thread.daemon = True
+            flask_thread.start()
+            
+            logger.info(f"Servidor Flask iniciado en puerto {PORT}")
+        
+        # Inicia el bot en el hilo principal
+        asyncio.run(run_bot())
+        
+    except Exception as e:
+        logger.error(f"Error fatal al iniciar: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

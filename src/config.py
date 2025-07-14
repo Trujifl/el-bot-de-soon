@@ -63,10 +63,9 @@ OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 env_path = Path(__file__).resolve().parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-# Configuración para despliegue
-RENDER = os.getenv("RENDER", "false").lower() == "true"  
+CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "").strip() or None
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+RENDER = os.getenv("RENDER", "false").lower() == "true"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://tu-bot.onrender.com")
 PORT = int(os.getenv("PORT", "10000"))
 
