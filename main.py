@@ -1,6 +1,5 @@
 import sys
 import os
-import asyncio
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from telegram.ext import Application, MessageHandler, CommandHandler, filters, CallbackQueryHandler
@@ -22,6 +21,8 @@ from src.handlers.resume import ResumeHandler
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
+
+
 async def set_bot_commands(application):
     """Configura los comandos visibles en la interfaz de Telegram"""
     commands = [
@@ -34,7 +35,7 @@ async def set_bot_commands(application):
     ]
     await application.bot.set_my_commands(commands)
 
-async def run_bot():
+def main():
     try:
         # 1. Inicialización del bot
         application = Application.builder().token(TOKEN).build()
@@ -55,23 +56,19 @@ async def run_bot():
         # 4. Modo de ejecución
         if RENDER:
             logger.info("Modo Render - Configurando webhook...")
-            await application.start_webhook(
+            application.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
                 webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
                 secret_token=os.getenv("WEBHOOK_SECRET", "SECRET_TOKEN")
             )
-            await asyncio.Event().wait()  # Mantiene el bot corriendo
         else:
             logger.info("Modo local - Usando polling...")
-            await application.run_polling()
+            application.run_polling()
             
     except Exception as e:
         logger.error(f"Error al iniciar el bot: {e}")
         raise
-
-def main():
-    asyncio.run(run_bot())
 
 if __name__ == "__main__":
     main()

@@ -13,7 +13,8 @@ dependencies = [
     "requests==2.31.0",
     "python-dotenv==1.0.0",
     "openai>=1.0.0",
-    "beautifulsoup4==4.12.0"
+    "beautifulsoup4==4.12.0",
+    "gunicorn==21.2.0"
 ]
 
 [dependency-groups]
@@ -26,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-telegram-bot = "bot:main"
+telegram-bot = "main:main"
 
 [build-system]
 requires = ["setuptools >= 77.0.3"]
