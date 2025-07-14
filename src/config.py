@@ -40,34 +40,27 @@ load_dotenv(dotenv_path=Path(".env"))
 # =============================================================================
 
 # Configuración esencial
-TELEGRAM_TOKEN: str = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 if not TELEGRAM_TOKEN:
     logger.error("Falta TELEGRAM_TOKEN en .env")
     raise ValueError("Token de Telegram no configurado")
 
-# Configuración de administradores
-ADMIN_IDS: List[int] = [
-    int(id.strip()) for id in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",") 
-    if id.strip()
-]
-
-raw_channel_id = os.getenv("TELEGRAM_CHANNEL_ID", "").strip()
-CHANNEL_ID = raw_channel_id if raw_channel_id.startswith(("@", "-100")) else None
+ADMIN_IDS = [int(id.strip()) for id in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",") if id.strip()]
+CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "").strip() or None
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+RENDER = os.getenv("RENDER", "false").lower() == "true"
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://tu-bot.onrender.com")
+PORT = int(os.getenv("PORT", "10000"))
 
 # Configuración opcional
 CHANNEL_ID: str = os.getenv("TELEGRAM_CHANNEL_ID")
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 
 
-
 env_path = Path(__file__).resolve().parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "").strip() or None
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
-RENDER = os.getenv("RENDER", "false").lower() == "true"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://tu-bot.onrender.com")
-PORT = int(os.getenv("PORT", "10000"))
+
 
 # =============================================================================
 # 3. CONSTANTES DEL BOT (configuración estática)
