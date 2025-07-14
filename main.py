@@ -3,8 +3,9 @@ import os
 import asyncio
 from threading import Thread
 from flask import Flask, jsonify
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, filters
 from telegram import BotCommand
+from waitress import serve  # Importación para Waitress
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
     PORT,
@@ -18,16 +19,16 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return jsonify({"status": "active", "bot": BotMeta.NAME}), 200
+    return jsonify({"status": "running", "bot": BotMeta.NAME}), 200
 
 def run_flask():
-    app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
+    serve(app, host="0.0.0.0", port=PORT)
 
-async def bot_main():
-    """Función principal asíncrona para el bot"""
+async def setup_bot():
+    """Configuración completa del bot"""
     application = Application.builder().token(TOKEN).build()
     
-    # Configura handlers aquí (importa dentro de la función para evitar circular imports)
+    # Importar handlers aquí para evitar circular imports
     from src.handlers.base import setup_base_handlers
     from src.handlers.crypto import precio_cripto
     from src.handlers.post import PostHandler
@@ -46,43 +47,64 @@ async def bot_main():
         pattern="^(confirm|cancel)_post_"
     ))
     
-    # Configura comandos
-    commands = [
+    # Configurar comandos del menú
+    await application.bot.set_my_commands([
         BotCommand("start", "Inicia el bot"),
         BotCommand("help", "Muestra ayuda"),
         BotCommand("precio", "Consulta precio de cripto"),
         BotCommand("post", "Crea un post para el canal"),
         BotCommand("resumen_texto", "Resume un texto en español"),
         BotCommand("resumen_url", "Resume una página web en español")
-    ]
-    await application.bot.set_my_commands(commands)
+    ])
     
     if RENDER:
-        logger.info("Modo Webhook - Configurando...")
+        logger.info("Configurando webhook...")
         await application.initialize()
         await application.bot.set_webhook(
             url=f"{WEBHOOK_URL}/{TOKEN}",
             secret_token=os.getenv("WEBHOOK_SECRET", "SECRET_TOKEN")
         )
-        await application.start()
-    else:
-        logger.info("Modo Polling - Iniciando...")
-        await application.run_polling()
+        return application
+    
+    logger.info("Iniciando en modo polling...")
+    return application
+
+async def run_bot():
+    """Ejecución principal del bot"""
+    application = await setup_bot()
+    
+    try:
+        if RENDER:
+            await application.start()
+            while True:
+                await asyncio.sleep(3600)  # Mantiene el bot activo
+        else:
+            await application.run_polling()
+    except asyncio.CancelledError:
+        logger.info("Deteniendo el bot...")
+        await application.stop()
+        await application.shutdown()
 
 def main():
     try:
         if RENDER:
-            # Inicia Flask en segundo plano
+            # Iniciar Flask con Waitress (producción)
             Thread(target=run_flask, daemon=True).start()
-            logger.info(f"Flask corriendo en puerto {PORT}")
+            logger.info(f"Servidor web iniciado en puerto {PORT}")
         
-        # Configuración especial del event loop
+        # Configurar e iniciar el bot
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        loop.run_until_complete(bot_main())
         
+        try:
+            loop.run_until_complete(run_bot())
+        except KeyboardInterrupt:
+            logger.info("Detención solicitada...")
+        finally:
+            loop.close()
+            
     except Exception as e:
-        logger.error(f"ERROR CRÍTICO: {str(e)}")
+        logger.error(f"Error crítico: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
