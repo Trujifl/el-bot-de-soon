@@ -28,6 +28,10 @@ application = Application.builder().token(TOKEN).build()
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
+async def get_webhook_status():
+    """Función asíncrona para obtener el estado del webhook"""
+    return await application.bot.get_webhook_info()
+
 # Registro de comandos en el menú de Telegram
 async def set_bot_commands():
     commands = [
@@ -70,7 +74,14 @@ async def webhook():
 # Health Check para Render
 @app.route('/')
 def health_check():
-    return f"{BotMeta.NAME} ✅ | Webhook: {application.bot.get_webhook_info()['url']}", 200
+    try:
+        # Usamos ensure_future para manejar la corrutina
+        from asyncio import ensure_future
+        webhook_info = ensure_future(get_webhook_status()).result()
+        return f"{BotMeta.NAME} ✅ | Webhook: {webhook_info.url if webhook_info.url else 'No configurado'}", 200
+    except Exception as e:
+        logger.error(f"Error en health check: {e}")
+        return f"{BotMeta.NAME} ✅ (Estado webhook no disponible)", 200
 
 # Inicialización (solo en ejecución directa)
 if __name__ == '__main__':
