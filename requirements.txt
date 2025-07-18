@@ -1,19 +1,10 @@
 # Core
-python-telegram-bot[webhooks]==20.8
+plaintext
+python-telegram-bot[webhooks]==21.0.1
 flask==2.3.2
-gunicorn==20.1.0
-
-# Dependencias esenciales
+gunicorn==21.2.0
 requests==2.31.0
 python-dotenv==1.0.0
 beautifulsoup4==4.12.0
-
-# OpenAI (si usas IA)
 openai==1.95.1
-
-# Compatibilidad
 pydantic==2.11.7
-typing-extensions==4.14.1
-waitress==3.0.0
-gunicorn==20.1.0
-
