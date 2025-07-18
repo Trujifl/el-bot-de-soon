@@ -1,4 +1,3 @@
-# render_main.py - Versión final funcional
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
@@ -9,7 +8,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
-from telegram import BotCommand
 import os
 import logging
 from src.config import (
@@ -22,16 +20,16 @@ from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 
-# Configuración inicial
+# Inicialización Flask
 app = Flask(__name__)
+
+# Configuración global del bot
+application = Application.builder().token(TOKEN).build()
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
-# Crea UNA instancia global de la aplicación
-application = Application.builder().token(TOKEN).build()
-
-# Configura los comandos del bot
-async def set_commands():
+# Registro de comandos en el menú de Telegram
+async def set_bot_commands():
     commands = [
         BotCommand("start", "Inicia el bot"),
         BotCommand("help", "Muestra ayuda"),
@@ -42,34 +40,40 @@ async def set_commands():
     ]
     await application.bot.set_my_commands(commands)
 
-# Configura todos los handlers
+# Configuración de todos los handlers
 def setup_handlers():
+    # Handlers base
     setup_base_handlers(application)
+    
+    # Handlers específicos
     application.add_handler(CommandHandler("precio", precio_cripto))
     application.add_handler(CommandHandler("post", post_handler.handle))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
-    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+    application.add_handler(CallbackQueryHandler(
+        post_handler.handle_confirmation, 
+        pattern="^(confirm|cancel)_post_"
+    ))
 
-# Endpoint para webhooks
+# Endpoint principal para webhooks
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
         update = Update.de_json(request.json, application.bot)
-        await application.update_queue.put(update)
-        logger.info(f"[{BotMeta.NAME}] Update procesado")
+        await application.process_update(update)
+        logger.info(f"[{BotMeta.NAME}] Mensaje procesado")
         return "OK", 200
     except Exception as e:
         logger.error(f"Error en webhook: {e}")
         return "Error", 500
 
-# Health check
+# Health Check para Render
 @app.route('/')
 def health_check():
-    return f"{BotMeta.NAME} está activo ✅", 200
+    return f"{BotMeta.NAME} ✅ | Webhook: {application.bot.get_webhook_info()['url']}", 200
 
-# Inicialización (se ejecuta solo al iniciar el servidor)
+# Inicialización (solo en ejecución directa)
 if __name__ == '__main__':
+    # Configuración inicial
     setup_handlers()
-    application.run_polling()  # Solo para desarrollo local
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
