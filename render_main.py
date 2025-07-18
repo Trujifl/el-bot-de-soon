@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 import os
 import logging
+import asyncio
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
     logger,
@@ -20,36 +21,30 @@ from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 
-# Inicialización Flask
+
 app = Flask(__name__)
 
-# Configuración global del bot
+
 application = Application.builder().token(TOKEN).build()
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
-async def get_webhook_status():
-    """Función asíncrona para obtener el estado del webhook"""
-    return await application.bot.get_webhook_info()
 
-# Registro de comandos en el menú de Telegram
-async def set_bot_commands():
-    commands = [
-        BotCommand("start", "Inicia el bot"),
-        BotCommand("help", "Muestra ayuda"),
-        BotCommand("precio", "Consulta precio de cripto"),
-        BotCommand("post", "Crea un post para el canal"),
-        BotCommand("resumen_texto", "Resume un texto en español"),
-        BotCommand("resumen_url", "Resume una página web en español")
-    ]
-    await application.bot.set_my_commands(commands)
+webhook_status_cache = "No verificado"
 
-# Configuración de todos los handlers
+async def update_webhook_status():
+    """Actualiza el estado del webhook periódicamente"""
+    global webhook_status_cache
+    while True:
+        try:
+            info = await application.bot.get_webhook_info()
+            webhook_status_cache = info.url if info.url else "No configurado"
+        except Exception as e:
+            webhook_status_cache = f"Error: {str(e)}"
+        await asyncio.sleep(300) 
+
 def setup_handlers():
-    # Handlers base
     setup_base_handlers(application)
-    
-    # Handlers específicos
     application.add_handler(CommandHandler("precio", precio_cripto))
     application.add_handler(CommandHandler("post", post_handler.handle))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
@@ -59,7 +54,6 @@ def setup_handlers():
         pattern="^(confirm|cancel)_post_"
     ))
 
-# Endpoint principal para webhooks
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
@@ -71,20 +65,21 @@ async def webhook():
         logger.error(f"Error en webhook: {e}")
         return "Error", 500
 
-# Health Check para Render
 @app.route('/')
 def health_check():
-    try:
-        # Usamos ensure_future para manejar la corrutina
-        from asyncio import ensure_future
-        webhook_info = ensure_future(get_webhook_status()).result()
-        return f"{BotMeta.NAME} ✅ | Webhook: {webhook_info.url if webhook_info.url else 'No configurado'}", 200
-    except Exception as e:
-        logger.error(f"Error en health check: {e}")
-        return f"{BotMeta.NAME} ✅ (Estado webhook no disponible)", 200
+    return f"{BotMeta.NAME} ✅ | Webhook: {webhook_status_cache}", 200
 
-# Inicialización (solo en ejecución directa)
-if __name__ == '__main__':
-    # Configuración inicial
+def run_app():
+   
     setup_handlers()
+    
+   
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.create_task(update_webhook_status())
+    
+   
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
+
+if __name__ == '__main__':
+    run_app()
