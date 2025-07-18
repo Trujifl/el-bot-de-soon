@@ -1,34 +1,41 @@
+import os
+import logging
+import asyncio
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
-    MessageHandler,
-    filters,
-    CallbackQueryHandler,
-    ContextTypes
+    CallbackQueryHandler
 )
-import os
-import logging
-import asyncio
-from src.config import (
-    TELEGRAM_TOKEN as TOKEN,
-    logger,
-    BotMeta
-)
-from src.handlers.base import setup_base_handlers
-from src.handlers.crypto import precio_cripto
-from src.handlers.post import PostHandler
-from src.handlers.resume import ResumeHandler
 
-# Inicialización Flask
+# Configuración básica
 app = Flask(__name__)
 
-# Configuración global del bot
+# Logger inicial
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+class BotMeta:
+    NAME = "MiBot"
+
+# Carga de variables (sin circularidad)
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+
 def create_application():
+    """Factory para la aplicación del bot"""
     application = Application.builder().token(TOKEN).build()
     
-    # Handlers
+    # Importación local para evitar circularidad
+    from src.handlers.base import setup_base_handlers
+    from src.handlers.crypto import precio_cripto
+    from src.handlers.post import PostHandler
+    from src.handlers.resume import ResumeHandler
+    
+    # Configuración de handlers
     post_handler = PostHandler()
     resume_handler = ResumeHandler()
     
@@ -44,26 +51,28 @@ def create_application():
     
     return application
 
-# Instancia única inicializada
+# Instancia del bot
 application = create_application()
 
-# Webhook endpoint
+# Webhook para Render
 @app.route('/webhook', methods=['POST'])
 def webhook():
     try:
         update = Update.de_json(request.json, application.bot)
-        # Ejecuta en un nuevo event loop
         asyncio.run(application.process_update(update))
-        logger.info(f"[{BotMeta.NAME}] Mensaje procesado")
+        logger.info(f"[{BotMeta.NAME}] Update procesado")
         return "OK", 200
     except Exception as e:
-        logger.error(f"Error en webhook: {e}")
+        logger.error(f"Error en webhook: {str(e)}")
         return "Error", 500
 
-# Health Check
 @app.route('/')
 def health_check():
-    return f"{BotMeta.NAME} ✅", 200
+    return f"{BotMeta.NAME} ✅ | Webhook activo", 200
+
+# Punto de entrada para Render
+def create_app():
+    return app
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
