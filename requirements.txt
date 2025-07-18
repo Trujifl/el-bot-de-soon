@@ -94,4 +94,5 @@ urllib3==2.5.0
 werkzeug==3.1.3
     # via flask
 waitress==3.0.0
+gunicorn==20.1.0
 
