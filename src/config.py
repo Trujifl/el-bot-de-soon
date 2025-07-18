@@ -1,56 +1,78 @@
+# render_main.py - Versión optimizada para Render
+from flask import Flask, request
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    CallbackQueryHandler,
+    ContextTypes
+)
 import os
 import logging
-import random
-from pathlib import Path
-from telegram.ext import Application
-
-# Configuración básica de logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('bot.log', encoding='utf-8')
-    ]
+import asyncio
+from src.config import (
+    TELEGRAM_TOKEN as TOKEN,
+    logger,
+    BotMeta
 )
-logger = logging.getLogger(__name__)
+from src.handlers.base import setup_base_handlers
+from src.handlers.crypto import precio_cripto
+from src.handlers.post import PostHandler
+from src.handlers.resume import ResumeHandler
 
-# Carga de variables de entorno
-env_path = Path(__file__).parent.parent / '.env'
-if env_path.exists():
-    from dotenv import load_dotenv
-    load_dotenv(env_path)
+# Configuración inicial
+app = Flask(__name__)
 
-# Variables esenciales
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ADMIN_IDS = [int(id.strip()) for id in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",") if id.strip()]
-CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
-
-def create_application():
-    """Crea y configura la aplicación de Telegram"""
-    if not TELEGRAM_TOKEN:
-        raise ValueError("TELEGRAM_TOKEN no está configurado")
+# Inicialización global del bot
+def init_bot():
+    application = Application.builder().token(TOKEN).build()
     
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    application.initialize()  # Inicialización explícita
+    # Handlers
+    post_handler = PostHandler()
+    resume_handler = ResumeHandler()
+    
+    setup_base_handlers(application)
+    application.add_handler(CommandHandler("precio", precio_cripto))
+    application.add_handler(CommandHandler("post", post_handler.handle))
+    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
+    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
+    application.add_handler(CallbackQueryHandler(
+        post_handler.handle_confirmation,
+        pattern="^(confirm|cancel)_post_"
+    ))
+    
+    # Inicialización explícita
+    application.initialize()
     return application
 
-class BotMeta:
-    NAME = "SoonBot"
-    VERSION = "2.0"
-    DESCRIPTION = "Asistente de criptomonedas"
-    
-    @classmethod
-    def full_name(cls):
-        return f"{cls.NAME} v{cls.VERSION}"
+application = init_bot()
 
-class BotPersonality:
-    CRYPTO_LIST = ["BTC", "ETH", "BNB", "SOL"]
-    
-    @staticmethod
-    def get_ai_prompt():
-        return {
-            "role": "system",
-            "content": "Eres un asistente de criptomonedas profesional pero cercano."
-        }
+# Webhook endpoint (versión compatible con Render)
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    try:
+        update = Update.de_json(request.json, application.bot)
+        
+        # Ejecución asíncrona segura
+        asyncio.run_coroutine_threadsafe(
+            application.process_update(update),
+            application.updater.dispatcher.loop
+        ).result()
+        
+        logger.info(f"[{BotMeta.NAME}] Update procesado")
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"Error en webhook: {str(e)}")
+        return "Error", 500
+
+# Health Check sincrónico
+@app.route('/')
+def health_check():
+    return f"{BotMeta.NAME} ✅ | Webhook activo", 200
+
+if __name__ == '__main__':
+    # Solo para desarrollo local
+    application.run_polling()
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000))
