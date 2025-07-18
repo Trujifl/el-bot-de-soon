@@ -8,43 +8,53 @@ from urllib.parse import urlparse
 
 class ResumeHandler:
     # ==================== MÉTODOS PRINCIPALES ====================
-    async def handle_resumen_texto(self, update: Update, context: CallbackContext) -> None:
-        """Procesa /resumen_texto con clasificación automática"""
-        original_text = update.message.text.replace('/resumen_texto', '').strip()
-        
-        if not original_text:
-            await update.message.reply_text("✂️ Envía el texto a resumir después del comando")
-            return
-
-        content_type = self._classify_content(original_text)
-        summary = self._generate_text_summary(original_text, content_type)
-        
+   async def handle_resumen_texto(self, update: Update, context: CallbackContext) -> None:
+    original_text = update.message.text.replace('/resumen_texto', '').strip()
+    
+    if not original_text:
         await update.message.reply_text(
-            f"📌 **Resumen ({content_type.upper()})**\n\n{summary}",
+            "📝 *Instrucciones para /resumen_texto:*\n\n"
+            "Envía el comando seguido del texto que deseas resumir:\n"
+            "Ejemplo:\n"
+            "`/resumen_texto Bitcoin es una criptomoneda descentralizada...`",
             parse_mode="Markdown"
         )
+        return
 
-    async def handle_resumen_url(self, update: Update, context: CallbackContext) -> None:
-        """Procesa /resumen_url con extracción web inteligente"""
-        url = update.message.text.replace('/resumen_url', '').strip()
+    try:
+        content_type = self._classify_content(original_text)
+        summary = self._generate_text_summary(original_text, content_type)
+        await update.message.reply_text(summary, parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error al generar resumen: {str(e)}")
         
-        if not url:
-            await update.message.reply_text("🌐 Envía la URL después del comando")
-            return
 
-        try:
-            title, clean_text = await self._fetch_web_content(url)
-            content_type = self._classify_content(clean_text)
-            summary = self._generate_url_summary(title, clean_text, content_type)
-            
-            await update.message.reply_text(
-                f"🔗 **Resumen {content_type.upper()}**\n\n{summary}\n\n🌐 Fuente: {self._get_domain(url)}",
-                parse_mode="Markdown",
-                disable_web_page_preview=True
-            )
-            
-        except Exception as e:
-            await update.message.reply_text(f"❌ Error: {str(e)[:200]}")
+   async def handle_resumen_url(self, update: Update, context: CallbackContext) -> None:
+    url = update.message.text.replace('/resumen_url', '').strip()
+
+    if not url:
+        await update.message.reply_text(
+            "🌐 *Instrucciones para /resumen_url:*\n\n"
+            "Envía el comando seguido de la URL que deseas resumir:\n"
+            "Ejemplo:\n"
+            "`/resumen_url https://ejemplo.com/articulo-cripto`",
+            parse_mode="Markdown"
+        )
+        return
+
+    try:
+        title, clean_text = await self._fetch_web_content(url)
+        content_type = self._classify_content(clean_text)
+        summary = self._generate_url_summary(title, clean_text, content_type)
+        await update.message.reply_text(
+            f"🔗 **Resumen de {title}**\n\n{summary}\n\n🌐 Fuente: {self._get_domain(url)}",
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error al procesar URL: {str(e)}")
+        
+
 
     # ==================== FUNCIONES COMPARTIDAS ====================
     def _classify_content(self, text: str) -> Literal['blockchain', 'finanzas', 'tecnología', 'general']:

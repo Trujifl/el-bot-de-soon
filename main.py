@@ -1,3 +1,4 @@
+import os
 import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler  # Asegúrate de incluir CommandHandler aquí
 from telegram import BotCommand
@@ -13,6 +14,13 @@ from src.handlers.resume import ResumeHandler
 
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
+
+if not os.getenv('RENDER'):  # Si NO está en Render, carga .env local
+    from dotenv import load_dotenv
+    load_dotenv()
+if os.getenv('RENDER'):
+    print("❌ Error: Usa 'render_main.py' en producción. Este archivo es solo para desarrollo local.")
+    exit(1)
 
 async def set_bot_commands(application):
     """Configura los comandos visibles en la interfaz de Telegram"""
@@ -50,6 +58,5 @@ def main():
     except Exception as e:
         logger.error(f"Error al iniciar el bot: {e}")
         raise
-
 if __name__ == "__main__":
     main()

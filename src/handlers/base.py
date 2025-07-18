@@ -1,36 +1,72 @@
 from telegram import Update
-from telegram.ext import ContextTypes, CallbackContext, CommandHandler, MessageHandler, filters
-from src.config import logger, BotPersonality
-from src.services import openai
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
+from src.config import logger
+from src.services.openai import generar_respuesta_ia
+from src.services.coingecko import CoinGeckoAPI
+from src.utils.personality import Personalidad
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    saludo = BotPersonality.get_random_saludo(user.first_name)
+    saludo = Personalidad.get_random_saludo(user.first_name)
     await update.message.reply_text(
-        f"{saludo}\n\nSoy {BotPersonality.NAME}, {BotPersonality.DESCRIPTION}",
+        f"{saludo}\n\nSoy SoonBot, tu asistente experto en criptomonedas.",
         parse_mode="Markdown"
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "ℹ️ Comandos disponibles:\n"
-        "/start - Mensaje de bienvenida\n"
-        "/precio [cripto] - Consultar precios\n"
-        "/post - Crear publicación\n"
-        "/resumen_texto - Resumir texto",
-        parse_mode="Markdown"
+    help_text = (
+        "ℹ️ *Comandos disponibles:*\n\n"
+        "*/start* - Mensaje de bienvenida\n"
+        "*/precio [cripto]* - Consultar precios (ej: /precio BTC)\n"
+        "*/resumen* - Resumir contenido (texto o URL)\n"
+        "*/post* - Crear publicación para el canal\n\n"
+        "📌 *Uso específico:*\n"
+        "Escribe solo el comando para ver instrucciones detalladas"
     )
+    await update.message.reply_text(help_text, parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_msg = update.message.text.lower()
+    user_name = update.effective_user.first_name
+    ctx = context.chat_data.get("cripto_ctx", {})  # Mantiene contexto por chat
+
+    # Detección de consulta de precio
+    if any(p in user_msg for p in ["precio", "a cuánto", "valor de"]):
+        cripto = next((c for c in ["btc", "eth", "sol", "bitcoin", "ethereum", "solana"] 
+                      if c in user_msg), None)
+        
+        if cripto:
+            try:
+                # Normaliza el ID para CoinGecko
+                cripto_id = "bitcoin" if cripto in ["btc", "bitcoin"] else \
+                           "ethereum" if cripto in ["eth", "ethereum"] else \
+                           "solana" if cripto in ["sol", "solana"] else cripto
+                
+                datos = CoinGeckoAPI.obtener_precio(cripto_id)
+                ctx[cripto] = datos  # Guarda contexto
+                opinion = Personalidad.generar_opinion_cripto(cripto_id, datos)
+                
+                respuesta = (
+                    f"📊 {datos['nombre']} ({datos['simbolo'].upper()})\n"
+                    f"💵 Precio: ${datos['precio']:,.2f}\n"
+                    f"📈 24h: {datos['cambio_24h']:+.2f}%\n\n"
+                    f"{opinion}"
+                )
+                
+            except Exception as e:
+                logger.error(f"Error al obtener precio: {str(e)}")
+                respuesta = Personalidad.generar_respuesta_error(user_name)
+            
+            await update.message.reply_text(respuesta)
+            return
+
+    # Flujo conversacional normal con IA
     try:
-        respuesta = await openai.generar_respuesta_ia(
-            update.message.text,
-            update.effective_user.first_name
-        )
+        respuesta = await generar_respuesta_ia(user_msg, user_name, ctx)
         await update.message.reply_text(respuesta)
     except Exception as e:
-        logger.error(f"Error en mensaje: {str(e)}")
-        await update.message.reply_text("⚠️ Error al procesar tu mensaje")
+        logger.error(f"Error en IA: {str(e)}")
+        await update.message.reply_text(Personalidad.generar_respuesta_error(user_name))
 
 def setup_base_handlers(application):
     """Configura los handlers básicos del bot"""

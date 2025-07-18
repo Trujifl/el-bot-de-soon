@@ -11,33 +11,44 @@ class PostHandler:
         self.CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
         self.ADMIN_IDS = [int(id.strip()) for id in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",") if id.strip()]
         
-        print(f"Canal: {self.CHANNEL_ID} | Admins: {self.ADMIN_IDS}")  # Debug
+        print(f"Canal: {self.CHANNEL_ID} | Admins: {self.ADMIN_IDS}")
 
     async def handle(self, update: Update, context: CallbackContext) -> None:
-        """Maneja /post solo para admins"""
-        user_id = update.effective_user.id
+        if len(update.message.text.split()) == 1:  # Solo escribió /post
+            await update.message.reply_text(
+                "📢 *Instrucciones para /post:*\n\n"
+                "Envía el comando seguido del contenido de tu publicación:\n"
+                "Formato recomendado:\n"
+                "`/post Título de tu publicación\n"
+                "Contenido detallado aquí...\n"
+                "#hashtags #opcionales`\n\n"
+                "Ejemplo completo:\n"
+                "`/post Análisis de mercado\n"
+                "Bitcoin muestra tendencia alcista...\n"
+                "#BTC #Cripto`",
+                parse_mode="Markdown"
+            )
+            return
         
-        # Verificación de admin
+        user_id = update.effective_user.id
         if user_id not in self.ADMIN_IDS:
-            await update.message.reply_text("❌ Solo administradores pueden usar este comando")
+            await update.message.reply_text("❌ Solo administradores pueden publicar")
             return
-
-        user_input = update.message.text.replace('/post', '').strip()
-        if not user_input:
-            await update.message.reply_text("Escribe el contenido después de /post")
-            return
-
-        # Guarda en pending_posts con confirmación requerida
-        self.pending_posts[user_id] = {"text": user_input}
+        
+        post_text = update.message.text.replace('/post', '', 1).strip()
+        self.pending_posts[user_id] = {"text": post_text}
         
         keyboard = [
             [InlineKeyboardButton("✅ Publicar", callback_data=f"confirm_post_{user_id}"),
              InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_post_{user_id}")]
         ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
-            f"✍️ Post pendiente:\n\n{user_input}\n\n¿Publicar en el canal?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "✍️ Vista previa del post:\n\n"
+            f"{post_text}\n\n"
+            "¿Quieres publicarlo en el canal?",
+            reply_markup=reply_markup
         )
 
     async def handle_confirmation(self, update: Update, context: CallbackContext) -> None:
@@ -47,7 +58,6 @@ class PostHandler:
         
         user_id = int(query.data.split('_')[-1])
         
-        # Doble verificación de admin (seguridad extra)
         if user_id not in self.ADMIN_IDS:
             await query.edit_message_text("❌ Acceso no autorizado")
             return

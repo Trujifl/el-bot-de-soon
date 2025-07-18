@@ -1,146 +1,60 @@
-"""
-Módulo de Personalidad del Bot - SoonBot v9.4
-
-Contiene:
-1. Generación de respuestas con estilo único
-2. Sistema de frases contextuales
-3. Manejo de emociones básicas
-"""
-
+from typing import Dict, Optional
 import random
-from typing import Optional
-from datetime import datetime
-from src.config import BotPersonality, logger
-from src.services.openai import generar_respuesta_ia
 
-class Personalidad: 
+class Personalidad:
+    """Define la personalidad y respuestas de SoonBot"""
+    
+    # Configuración básica
+    NAME = "SoonBot"
+    DESCRIPTION = "tu asistente experto en criptomonedas"
+    
     @staticmethod
-    def generar_saludo(nombre: str) -> str:
-        """Genera un saludo casual con el estilo del bot"""
+    def get_random_saludo(nombre: str) -> str:
         saludos = [
-            f"¡Epa {nombre}! ¿Cómo anda, todo bien? 👊",
-            f"¡Buenaas {nombre}! ¿En qué te ayudo? 🔥",
-            f"¡Buenas crack!!! Dime cómo colaboramos hoy 💼",
-            f"¡Que pasaaa {nombre}! Listo para lo que necesites ⚡"
+            f"¡Hola {nombre}! 👋 ¿En qué puedo ayudarte hoy?",
+            f"¿Listo para explorar el mundo crypto, {nombre}? 🚀",
+            f"¡Bienvenido {nombre}! ¿Qué cripto te interesa hoy? 💰"
         ]
         return random.choice(saludos)
 
     @staticmethod
-    def generar_despedida(nombre: str) -> str:
-        """Genera una despedida con personalidad"""
-        despedidas = [
-            f"¡Listo socio! Cualquier cosa me chiflas 👌",
-            f"Nos vemos {nombre}, no te quedes ghosteando 👻",
-            f"Hasta luego, ¡que no se te caiga el exchange! 😎",
-            f"Chao pescao, éxito en esas inversiones 🐟"
-        ]
-        return random.choice(despedidas)
-
-    @staticmethod
-    def generar_respuesta_positiva() -> str:
-        """Respuestas para acciones exitosas"""
-        frases = [
-            "¡Juega vivo! Así me gusta 😏",
-            "¡Esooo Excelente! Apretaste el botón correcto 🤙",
-            "¡Confirmado! Más rápido que transacción en Solana ⚡",
-            "¡Listo! Más fácil que minar con ASIC ✅"
-        ]
-        return random.choice(frases)
-
-    @staticmethod
     def generar_respuesta_error(nombre: str) -> str:
-        """Mensajes de error con estilo"""
         errores = [
-            f"¡Chale {nombre}! Algo se bugueó 😅 ¿Le damos F5?",
-            "Error 404 - Aquí no hay crypto... pero reintentemos 🔄",
-            "Se cayó como LUNA... pero ya lo reseteamos 🌕",
-            "¡Ups! Parece que me doxxearon... broma, reintenta 👀"
+            f"⚠️ {nombre}, ocurrió un error. Por favor, inténtalo más tarde.",
+            f"🔧 {nombre}, estamos solucionando el problema...",
+            "¡Ups! Algo salió mal. Prueba /help para opciones."
         ]
         return random.choice(errores)
 
     @staticmethod
-    def generar_mensaje_espera() -> str:
-        """Mensajes mientras se procesa algo"""
-        mensajes = [
-            "Tranqui, no es rugpull... procesando 🕵️",
-            "Espera espera, como en ICO... cargando 📈",
-            "Mándame un memecoin mientras esperas... trabajando 🐶",
-            "Más rápido que Binance en caída... pero dame un toque ⏳"
-        ]
-        return random.choice(mensajes)
+    def get_instructions(contexto: Optional[Dict] = None) -> str:
+        base = (
+            "Eres SoonBot, experto en criptomonedas con un tono profesional pero cercano. "
+            "Características:\n"
+            "- Usa emojis relevantes (🚀 para oportunidades, ⚠️ para riesgos)\n"
+            "- Sé conciso (máximo 2-3 frases)\n"
+            "- Proporciona análisis útiles pero simples\n"
+            "- Mantén un estilo conversacional"
+        )
+        if contexto:
+            return f"{base}\n\nContexto actual:\n{str(contexto)}"
+        return base
 
     @staticmethod
-    def generar_respuesta_cripto(cripto: str, accion: str) -> Optional[str]:
-        """Respuestas contextuales sobre criptomonedas"""
-        cripto = cripto.lower()
-        respuestas = {
-            "bitcoin": [
-                f"Ahhh el rey {cripto} 👑, dime qué necesitas saber",
-                f"BTC, el oro digital 🏆, ¿qué te interesa?"
-            ],
-            "ethereum": [
-                f"{cripto.capitalize()} y su mundo DeFi 🏦",
-                f"ETH, el combustible de los smart contracts ⛽"
-            ],
-            "inversion": [
-                f"¿Pensando en invertir en {cripto}? 💰 Te doy data:",
-                f"Antes de comprar {cripto}, considera:"
-            ],
-            "general": [
-                f"¡{cripto.capitalize()} en el radar! 📡",
-                f"Interesante lo de {cripto}, dime más..."
-            ]
-        }
-        
-        if cripto in respuestas:
-            return random.choice(respuestas[cripto])
-        elif accion in respuestas:
-            return random.choice(respuestas[accion])
-        else:
-            return random.choice(respuestas["general"])
-
-    @staticmethod
-    def generar_respuesta_temporal() -> str:
-        """Respuestas que varían según hora del día"""
-        hora = datetime.now().hour
-        if 5 <= hora < 12:
-            return "¡Buenos días cryptoamigo! ☀️ ¿En qué onda?"
-        elif 12 <= hora < 19:
-            return "¡Buenas tardes! ¿Cómo va el trading? 📊"
-        else:
-            return "¡Buena noche! ¿Analizando charts? 🌙"
-
-    @staticmethod
-    def responder(mensaje: str, nombre_usuario: str, contexto: str = None) -> str:
-        """
-        Sistema centralizado de respuestas.
-        
-        Parámetros:
-            mensaje: Texto del usuario
-            nombre_usuario: Nombre para personalizar
-            contexto: 'precio', 'inversion', etc.
-        """
-        mensaje = mensaje.lower()
-
-    @staticmethod
-    async def generar_respuesta_avanzada(mensaje: str, nombre_usuario: str, contexto: str = None) -> str:
-        """Usa OpenAI para respuestas conversacionales avanzadas"""
-        try:
-            # 1. Primero intenta con respuestas predefinidas
-            respuesta_predefinida = Personalidad.responder(mensaje, nombre_usuario, contexto)
-            if "no entendí" not in respuesta_predefinida.lower():
-                return respuesta_predefinida
-            
-            # 2. Si no hay respuesta predefinida adecuada, usa OpenAI
-            respuesta_ia = await generar_respuesta_ia(
-                mensaje=mensaje,
-                contexto=contexto,
-                nombre_usuario=nombre_usuario
+    def generar_opinion_cripto(moneda: str, datos: Dict) -> str:
+        analisis = {
+            "bitcoin": (
+                "📌 Bitcoin es el oro digital. "
+                f"{'Corrección saludable' if datos['cambio_24h'] < 0 else 'Fuerte acumulación'}."
+            ),
+            "ethereum": (
+                "💡 Ethereum es líder en DeFi. "
+                f"{'Gas fees altas' if datos['precio'] > 3000 else 'Buen momento para entrar'}."
+            ),
+            "solana": (
+                "⚡ Solana ofrece velocidad. "
+                f"{'Red inestable' if datos['cambio_24h'] < -5 else 'Ecosistema creciendo'}."
             )
-            return respuesta_ia or Personalidad.generar_respuesta_error(nombre_usuario)
-            
-        except Exception as e:
-            logger.error(f"Error al generar respuesta: {e}")
-            return Personalidad.generar_respuesta_error(nombre_usuario)
-        
-        
+        }
+        return analisis.get(moneda.lower(), 
+            f"🔍 {moneda.upper()}: {'Bajista' if datos['cambio_24h'] < 0 else 'Alcista'} en corto plazo.")
