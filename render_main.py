@@ -1,4 +1,4 @@
-# render_main.py
+# render_main.py - Versión final funcional
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
@@ -6,10 +6,10 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     filters,
-    CallbackQueryHandler
+    CallbackQueryHandler,
+    ContextTypes
 )
 from telegram import BotCommand
-import asyncio
 import os
 import logging
 from src.config import (
@@ -27,8 +27,11 @@ app = Flask(__name__)
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
-# Configura los comandos del bot (para la interfaz de Telegram)
-async def set_bot_commands(application):
+# Crea UNA instancia global de la aplicación
+application = Application.builder().token(TOKEN).build()
+
+# Configura los comandos del bot
+async def set_commands():
     commands = [
         BotCommand("start", "Inicia el bot"),
         BotCommand("help", "Muestra ayuda"),
@@ -39,40 +42,34 @@ async def set_bot_commands(application):
     ]
     await application.bot.set_my_commands(commands)
 
-# Crea la aplicación de Telegram con todos los handlers
-def create_telegram_app():
-    application = Application.builder().token(TOKEN).build()
-    
-    # Handlers desde src/handlers/
+# Configura todos los handlers
+def setup_handlers():
     setup_base_handlers(application)
     application.add_handler(CommandHandler("precio", precio_cripto))
     application.add_handler(CommandHandler("post", post_handler.handle))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
-    
-    # Comandos visibles en el menú
-    application.post_init = set_bot_commands
-    
-    return application
 
 # Endpoint para webhooks
 @app.route('/webhook', methods=['POST'])
-def webhook():
+async def webhook():
     try:
-        application = create_telegram_app()
         update = Update.de_json(request.json, application.bot)
-        asyncio.run(application.process_update(update))
-        logger.info(f"[{BotMeta.NAME}] Update procesado correctamente")
+        await application.update_queue.put(update)
+        logger.info(f"[{BotMeta.NAME}] Update procesado")
         return "OK", 200
     except Exception as e:
         logger.error(f"Error en webhook: {e}")
         return "Error", 500
 
-# Health check para Render
+# Health check
 @app.route('/')
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
+# Inicialización (se ejecuta solo al iniciar el servidor)
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=os.getenv('PORT', 10000))
+    setup_handlers()
+    application.run_polling()  # Solo para desarrollo local
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
