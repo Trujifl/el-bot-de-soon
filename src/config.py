@@ -1,4 +1,3 @@
-# render_main.py - Versión optimizada para Render
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
@@ -75,5 +74,5 @@ def health_check():
 if __name__ == '__main__':
     # Solo para desarrollo local
     application.run_polling()
-   app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
 
