@@ -76,3 +76,4 @@ if __name__ == '__main__':
     # Solo para desarrollo local
     application.run_polling()
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000))
+
