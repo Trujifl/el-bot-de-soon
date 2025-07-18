@@ -12,6 +12,7 @@ class BotMeta:
 
 # Configuración esencial (sin dependencias)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PORT = int(os.getenv("PORT", 10000))
 SECRET_KEY = os.getenv("SECRET_KEY", "default-secret-key-123")
 
