@@ -1,8 +1,18 @@
+# Paquetes principales
+fastapi==0.109.1
+uvicorn==0.27.0
 python-telegram-bot[webhooks]==21.0.1
-flask[async]==3.0.0
-gunicorn==21.2.0
-requests==2.31.0
 python-dotenv==1.0.0
+
+# Seguridad y APIs
+httpx==0.26.0
+hmac-hashlib==1.0.0
+python-multipart==0.0.6
+
+# OpenAI (opcional, solo si usas IA)
+openai==1.12.0
+
+# Manejo de datos
+pydantic==2.6.1
 beautifulsoup4==4.12.0
-openai==1.95.1
-pydantic==2.11.7
+requests==2.31.0
