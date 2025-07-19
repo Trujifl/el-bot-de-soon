@@ -1,1 +1,1 @@
-web: gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 render_main:app
+web: uvicorn render_main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 30
