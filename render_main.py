@@ -1,70 +1,68 @@
 from fastapi import FastAPI, Request, HTTPException
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler
-)
-import os
+from telegram.ext import Application
 import logging
-import asyncio
+from src.config import settings, logger
 
-# Configuración inicial
-app = FastAPI(title="Telegram Bot API")
-
-# Logger
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+app = FastAPI(
+    title="SoonBot API",
+    description="API para el bot de Telegram especializado en criptomonedas",
+    version="2.0"
 )
-logger = logging.getLogger(__name__)
 
-TOKEN = os.getenv('TELEGRAM_TOKEN')
+async def setup_bot():
+    """Configuración modular del bot"""
+    bot_app = Application.builder().token(settings.TELEGRAM_TOKEN).build()
+    
+    # Importación diferida para evitar circularidad
+    from src.handlers import setup_handlers
+    from src.services.openai import generar_respuesta_ia
+    
+    # Configura handlers existentes
+    setup_handlers(bot_app)
+    
+    # Configuración adicional si es necesaria
+    if settings.ALLOWED_CHANNELS:
+        from src.handlers.channel import ChannelForwarder
+        channel_handler = ChannelForwarder(settings.ALLOWED_CHANNELS)
+        bot_app.add_handler(MessageHandler(
+            filters.ChatType.CHANNEL,
+            channel_handler.forward_to_group
+        ))
+    
+    return bot_app
 
-# Configuración del bot (igual que en tu versión)
-def create_application():
-    application = Application.builder().token(TOKEN).build()
-    
-    from src.handlers.base import setup_base_handlers
-    from src.handlers.crypto import precio_cripto
-    from src.handlers.post import PostHandler
-    from src.handlers.resume import ResumeHandler
-    
-    post_handler = PostHandler()
-    resume_handler = ResumeHandler()
-    
-    setup_base_handlers(application)
-    application.add_handler(CommandHandler("precio", precio_cripto))
-    application.add_handler(CommandHandler("post", post_handler.handle))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
-    application.add_handler(CallbackQueryHandler(
-        post_handler.handle_confirmation,
-        pattern="^(confirm|cancel)_post_"
-    ))
-    
-    return application
+@app.on_event("startup")
+async def on_startup():
+    """Inicialización asíncrona"""
+    try:
+        app.state.bot = await setup_bot()
+        await app.state.bot.initialize()
+        logger.info("✅ Bot iniciado correctamente")
+    except Exception as e:
+        logger.critical(f"❌ Error de inicio: {str(e)}")
+        raise
 
-application = create_application()
-
-# Webhook para FastAPI
-@app.post('/webhook')
+@app.post("/webhook")
 async def webhook(request: Request):
+    """Endpoint para webhooks de Telegram"""
     try:
         data = await request.json()
-        update = Update.de_json(data, application.bot)
-        await application.process_update(update)
-        logger.info("Update procesado")
-        return {"status": "OK"}
+        update = Update.de_json(data, app.state.bot.bot)
+        await app.state.bot.process_update(update)
+        return {"status": "success"}
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Error interno")
+        logger.error(f"Webhook error: {str(e)}", exc_info=True)
+        raise HTTPException(500, detail="Error interno")
 
-# Health Check
-@app.get('/')
+@app.get("/")
 async def health_check():
+    """Endpoint de verificación de estado"""
     return {
         "status": "active",
-        "service": "Telegram Bot",
-        "documentation": "/docs"
+        "bot": "SoonBot",
+        "services": {
+            "openai": bool(settings.OPENAI_API_KEY),
+            "coingecko": bool(settings.COINGECKO_API_KEY),
+            "channels": bool(settings.ALLOWED_CHANNELS)
+        }
     }
