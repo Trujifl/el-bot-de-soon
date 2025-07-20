@@ -1,5 +1,5 @@
-# Versión exclusiva para producción en Render
-from flask import Flask, request
+# Versión optimizada para producción en Render con Flask async
+from flask import Flask, request, Response
 from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
@@ -9,6 +9,7 @@ from telegram.ext import (
 )
 import os
 import logging
+import asyncio
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
     WEBHOOK_URL,
@@ -53,18 +54,26 @@ def setup_handlers():
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
+# Webhook compatible con Flask sync
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook_handler():
     if request.headers.get('X-Telegram-Bot-Api-Secret-Token') != WEBHOOK_SECRET:
         return "Acceso no autorizado", 403
-    try:
-        update = Update.de_json(request.json, application.bot)
-        await application.update_queue.put(update)
-        logger.info(f"[{BotMeta.NAME}] Update procesado")
-        return "OK", 200
-    except Exception as e:
-        logger.error(f"Error en webhook: {e}")
-        return "Error", 500
+    
+    async def process_update():
+        try:
+            update = Update.de_json(request.json, application.bot)
+            await application.update_queue.put(update)
+            logger.info(f"[{BotMeta.NAME}] Update procesado")
+            return "OK", 200
+        except Exception as e:
+            logger.error(f"Error en webhook: {e}")
+            return "Error", 500
+    
+    return Response(
+        asyncio.run(process_update()),
+        mimetype='text/plain'
+    )
 
 @app.route('/')
 def health_check():
@@ -72,9 +81,12 @@ def health_check():
 
 if __name__ == '__main__':
     setup_handlers()
+    
+    # Configuración específica para Render
     application.run_webhook(
         listen="0.0.0.0",
         port=int(PORT),
         webhook_url=WEBHOOK_URL,
-        secret_token=WEBHOOK_SECRET
+        secret_token=WEBHOOK_SECRET,
+        drop_pending_updates=True
     )
