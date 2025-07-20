@@ -1,6 +1,6 @@
-# render_main.py - Adaptado para Render
+# render_main.py - Versión optimizada para Render
 from flask import Flask, request
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -9,27 +9,27 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
-from telegram import BotCommand
 import os
 import logging
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
-    logger,
-    BotMeta,
     WEBHOOK_URL,
     WEBHOOK_SECRET,
-    PORT
+    PORT,
+    logger,
+    BotMeta
 )
 from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 
+# Configuración inicial
 app = Flask(__name__)
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
-# Configuración global de la aplicación de Telegram
+# Crea la instancia de la aplicación de Telegram
 application = Application.builder().token(TOKEN).build()
 
 async def set_commands():
@@ -70,15 +70,14 @@ def health_check():
 
 if __name__ == '__main__':
     setup_handlers()
-    # Configuración específica para Render (solo webhook, no polling)
+    # Modo producción (Render)
     if os.getenv('RENDER', 'false').lower() == 'true':
         application.run_webhook(
             listen="0.0.0.0",
             port=int(PORT),
-            url_path=TOKEN,
             webhook_url=WEBHOOK_URL,
             secret_token=WEBHOOK_SECRET
         )
     else:
-        # Para desarrollo local (opcional, si necesitas testing)
+        # Modo desarrollo local
         application.run_polling()
