@@ -1,5 +1,3 @@
-plaintext
-# Dependencias principales
 python-telegram-bot[webhooks]==20.7
 flask==2.3.2
 openai==1.95.1
