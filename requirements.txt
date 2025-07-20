@@ -1,4 +1,4 @@
-flask[async]==2.3.2  # Versión con soporte async
+flask[async]==2.3.2
 python-telegram-bot[webhooks]==21.1.1
 openai==1.95.1
 gunicorn==20.1.0
