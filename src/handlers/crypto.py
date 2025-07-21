@@ -87,3 +87,28 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def setup(application):
     application.add_handler(CommandHandler("precio", precio_cripto))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, detectar_pregunta))
+
+TRIGGERS = ["cuánto vale", "precio de", "valor de", "cuánto cuesta", "cotiza"]
+
+async def detectar_pregunta(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    texto = update.message.text.lower()
+
+    for trigger in TRIGGERS:
+        if trigger in texto:
+            partes = texto.split(trigger)
+            if len(partes) > 1:
+                consulta = partes[1].strip().split()[0]
+                if not consulta:
+                    return
+                try:
+                    await crypto_mapper.maybe_refresh_list()
+                    cripto_id = crypto_mapper.find_coin(consulta)
+                    if not cripto_id:
+                        await update.message.reply_text(f"❌ No reconocí la cripto '{consulta}'")
+                        return
+                    datos = CoinGeckoAPI.obtener_precio(cripto_id)
+                    await send_crypto_price(update, datos)
+                except Exception as e:
+                    await update.message.reply_text(f"⚠️ Error: {str(e)}")
+                return
