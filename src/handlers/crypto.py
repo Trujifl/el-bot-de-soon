@@ -47,8 +47,14 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         contexto = construir_contexto_opinion(datos)
         prompt = armar_prompt_opinion(datos)
+
+        disclaimer = (
+            "\n\n⚠️ *Aviso rápido:* Este análisis es solo informativo y con un toque de humor. "
+            "¡No tomes decisiones de inversión solo por lo que diga un bot! 😉"
+        )
+
         respuesta_ia = await generar_respuesta_ia(prompt, update.effective_user.first_name, contexto)
-        await update.message.reply_text(respuesta_ia)
+        await update.message.reply_text(respuesta_ia + disclaimer, parse_mode="Markdown")
 
     except Exception as e:
         logger.error(f"Error en /precio: {e}")
