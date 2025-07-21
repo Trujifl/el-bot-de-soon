@@ -13,7 +13,7 @@ from telegram.ext import (
 )
 from openai import OpenAI
 
-# Configuración básica
+# Configuración básica de logs
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -90,12 +90,7 @@ async def resumen_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja la creación de posts"""
     try:
-        # Lógica para crear posts
         await update.message.reply_text("✏️ Envía el contenido de tu post:")
-        
-        # Aquí iría la lógica para guardar el post y confirmar
-        # ...
-        
     except Exception as e:
         logger.error(f"Error en post_handler: {str(e)}")
         await update.message.reply_text("❌ Error al crear post")
@@ -123,23 +118,34 @@ def setup_application():
 # --- Ejecución Principal ---
 async def run_bot():
     application = setup_application()
+    port = int(os.getenv('PORT', 10000))
+    webhook_url = os.getenv('WEBHOOK_URL') + "/webhook"  # ¡Ruta /webhook obligatoria!
     
-    await application.initialize()
-    await application.start()
-    await application.updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv('PORT', 10000)),
-        webhook_url=os.getenv('WEBHOOK_URL'),
-        drop_pending_updates=True
-    )
-    
-    logger.info("✅ Bot iniciado correctamente")
-    await asyncio.Event().wait()  # Ejecución continua
+    try:
+        await application.initialize()
+        await application.start()
+        
+        # Configuración del webhook con ruta específica
+        await application.updater.start_webhook(
+            listen="0.0.0.0",
+            port=port,
+            webhook_url=webhook_url,
+            secret_token=os.getenv('WEBHOOK_SECRET'),
+            drop_pending_updates=True
+        )
+        
+        logger.info(f"✅ Bot activo en {webhook_url} (Puerto: {port})")
+        await asyncio.Event().wait()  # Ejecución infinita
+        
+    except Exception as e:
+        logger.error(f"❌ Error fatal: {str(e)}")
+    finally:
+        await application.stop()
 
 if __name__ == '__main__':
     try:
         asyncio.run(run_bot())
     except KeyboardInterrupt:
-        logger.info("🛑 Deteniendo el bot...")
+        logger.info("🛑 Bot detenido manualmente")
     except Exception as e:
-        logger.error(f"❌ Error fatal: {str(e)}")
+        logger.error(f"❌ Error no manejado: {str(e)}")
