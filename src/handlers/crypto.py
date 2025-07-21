@@ -1,8 +1,7 @@
-# src/handlers/crypto.py
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
-from src.services.coingecko import CoinGeckoAPI  # API Client
-from src.services.crypto_mapper import crypto_mapper  # Mapper instance
+from src.services.coingecko import CoinGeckoAPI  
+from src.services.crypto_mapper import crypto_mapper  
 from src.config import logger
 
 async def send_crypto_price(update: Update, datos: dict):
@@ -49,10 +48,8 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_input = context.args[0].strip()
         logger.info(f"Consulta de precio para: {user_input}")
 
-        # Actualizar lista si es necesario
         await crypto_mapper.maybe_refresh_list()
         
-        # Buscar la criptomoneda
         cripto_id = crypto_mapper.find_coin(user_input)
         
         if not cripto_id:
@@ -66,7 +63,6 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
             
-        # Obtener datos del precio
         try:
             datos = CoinGeckoAPI.obtener_precio(cripto_id)
             if not datos:
