@@ -1,4 +1,3 @@
-# render_main.py - Versión final funcional
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
@@ -21,16 +20,14 @@ from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
+from src.services.price_updater import iniciar_actualizador
 
-# Configuración inicial
 app = Flask(__name__)
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
-# Crea UNA instancia global de la aplicación
 application = Application.builder().token(TOKEN).build()
 
-# Configura los comandos del bot
 async def set_commands():
     commands = [
         BotCommand("start", "Inicia el bot"),
@@ -42,7 +39,6 @@ async def set_commands():
     ]
     await application.bot.set_my_commands(commands)
 
-# Configura todos los handlers
 def setup_handlers():
     setup_base_handlers(application)
     application.add_handler(CommandHandler("precio", precio_cripto))
@@ -51,7 +47,6 @@ def setup_handlers():
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
-# Endpoint para webhooks
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
@@ -63,12 +58,10 @@ async def webhook():
         logger.error(f"Error en webhook: {e}")
         return "Error", 500
 
-# Health check
 @app.route('/')
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
-# Inicialización (se ejecuta solo al iniciar el servidor)
 if __name__ == '__main__':
     setup_handlers()
     application.run_polling()  # Solo para desarrollo local
