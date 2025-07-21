@@ -1,4 +1,4 @@
-# render_main.py - Versión definitiva con filtro IP
+# render_main.py - Versión final funcional
 from flask import Flask, request, Response
 from telegram import Update, BotCommand
 from telegram.ext import (
@@ -23,9 +23,10 @@ from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 
+# Configuración inicial
 app = Flask(__name__)
 
-# Configuración IPs permitidas (Telegram + Render internas)
+# Rangos IP permitidos (Telegram + Render internas)
 ALLOWED_NETS = [
     ipaddress.ip_network('149.154.160.0/20'),  # Telegram
     ipaddress.ip_network('91.108.4.0/22'),     # Telegram
@@ -51,6 +52,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Escribe /help para ver mis comandos"
     )
 
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /help"""
+    commands = [
+        "/start - Iniciar bot",
+        "/precio - Consultar precios de cripto",
+        "/resumen_texto - Resumir texto con IA",
+        "/resumen_url - Resumir URL con IA"
+    ]
+    await update.message.reply_text("\n".join(commands))
+
 def setup_handlers():
     # Comandos básicos
     application.add_handler(CommandHandler("start", start))
@@ -69,20 +80,25 @@ def setup_handlers():
         lambda u, c: u.message.reply_text("No entendí. Usa /help")
     ))
 
-# Webhook mejorado
+# Webhook corregido (solución al error "await dict")
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
-        update = Update.de_json(await request.get_json(), application.bot)
+        json_data = request.get_json()
+        if not json_data:
+            return "Datos inválidos", 400
+            
+        update = Update.de_json(json_data, application.bot)
         await application.process_update(update)
-        return "", 200  # Respuesta vacía para ahorrar ancho de banda
+        return "", 200
+        
     except Exception as e:
-        logger.error(f"Error en webhook: {str(e)}")
-        return "Error", 500
+        logger.error(f"Error en webhook: {str(e)}", exc_info=True)
+        return "Error interno", 500
 
 @app.route('/')
 def health_check():
-    return f"{BotMeta.NAME} operativo", 200
+    return f"{BotMeta.NAME} operativo ✅", 200
 
 if __name__ == '__main__':
     setup_handlers()
