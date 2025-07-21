@@ -1,75 +1,83 @@
-# render_main.py - Versión final funcional
-from flask import Flask, request
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    CallbackQueryHandler,
-    ContextTypes
-)
-from telegram import BotCommand
-import os
-import logging
-from src.config import (
-    TELEGRAM_TOKEN as TOKEN,
-    logger,
-    BotMeta
-)
-from src.handlers.base import setup_base_handlers
-from src.handlers.crypto import precio_cripto
-from src.handlers.post import PostHandler
-from src.handlers.resume import ResumeHandler
+import requests
+import time
+from datetime import datetime
+from src.config import APIConfig, logger
 
-# Configuración inicial
-app = Flask(__name__)
-post_handler = PostHandler()
-resume_handler = ResumeHandler()
+class CoinGeckoAPI:
+    # Control de rate limits
+    _last_request_time = 0
+    REQUEST_DELAY = 7  # 7 segundos entre llamadas (~8/min)
+    CACHE = {}
+    CACHE_TTL = 300  # 5 minutos
 
-# Crea UNA instancia global de la aplicación
-application = Application.builder().token(TOKEN).build()
+    @classmethod
+    def obtener_precio(cls, cripto_id: str) -> dict:
+        """Obtiene precio con caché y control de rate limits."""
+        cripto_id = cripto_id.lower()
+        
+        # Verificar caché primero
+        if cripto_id in cls.CACHE:
+            cached_data, timestamp = cls.CACHE[cripto_id]
+            if (datetime.now() - timestamp).total_seconds() < cls.CACHE_TTL:
+                logger.info(f"Devolviendo datos en caché para {cripto_id}")
+                return cached_data
 
-# Configura los comandos del bot
-async def set_commands():
-    commands = [
-        BotCommand("start", "Inicia el bot"),
-        BotCommand("help", "Muestra ayuda"),
-        BotCommand("precio", "Consulta precio de cripto"),
-        BotCommand("post", "Crea un post para el canal"),
-        BotCommand("resumen_texto", "Resume un texto en español"),
-        BotCommand("resumen_url", "Resume una página web en español")
-    ]
-    await application.bot.set_my_commands(commands)
+        # Control de rate limit
+        cls._enforce_rate_limit()
 
-# Configura todos los handlers
-def setup_handlers():
-    setup_base_handlers(application)
-    application.add_handler(CommandHandler("precio", precio_cripto))
-    application.add_handler(CommandHandler("post", post_handler.handle))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
-    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+        try:
+            # Primera llamada para precio y cambio
+            price_url = f"{APIConfig.COINGECKO_URL}/simple/price?ids={cripto_id}&vs_currencies=usd&include_24hr_change=true"
+            price_data = cls._make_api_call(price_url)
+            
+            if cripto_id not in price_data or "usd" not in price_data[cripto_id]:
+                raise ValueError("Estructura de precio inválida")
 
-# Endpoint para webhooks
-@app.route('/webhook', methods=['POST'])
-async def webhook():
-    try:
-        update = Update.de_json(request.json, application.bot)
-        await application.update_queue.put(update)
-        logger.info(f"[{BotMeta.NAME}] Update procesado")
-        return "OK", 200
-    except Exception as e:
-        logger.error(f"Error en webhook: {e}")
-        return "Error", 500
+            # Segunda llamada para metadatos
+            detail_url = f"{APIConfig.COINGECKO_URL}/coins/{cripto_id}"
+            detail_data = cls._make_api_call(detail_url)
 
-# Health check
-@app.route('/')
-def health_check():
-    return f"{BotMeta.NAME} está activo ✅", 200
+            # Validación de datos
+            required_fields = ["name", "symbol", "market_data"]
+            if not all(field in detail_data for field in required_fields):
+                raise ValueError("Faltan campos esenciales")
 
-# Inicialización (se ejecuta solo al iniciar el servidor)
-if __name__ == '__main__':
-    setup_handlers()
-    application.run_polling()  # Solo para desarrollo local
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
+            # Construir respuesta
+            result = {
+                "nombre": detail_data["name"],
+                "simbolo": detail_data["symbol"].upper(),
+                "precio": float(price_data[cripto_id]["usd"]),
+                "cambio_24h": float(price_data[cripto_id].get("usd_24h_change", 0)),
+                "ultima_actualizacion": datetime.now().strftime("%d/%m/%Y %H:%M")
+            }
+
+            # Actualizar caché
+            cls.CACHE[cripto_id] = (result, datetime.now())
+            return result
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                cls.REQUEST_DELAY = min(60, cls.REQUEST_DELAY * 2)  # Backoff exponencial
+                logger.warning(f"Rate limit alcanzado. Nuevo delay: {cls.REQUEST_DELAY}s")
+            raise
+
+    @classmethod
+    def _enforce_rate_limit(cls):
+        """Garantiza el tiempo entre solicitudes."""
+        elapsed = time.time() - cls._last_request_time
+        if elapsed < cls.REQUEST_DELAY:
+            wait_time = cls.REQUEST_DELAY - elapsed
+            time.sleep(wait_time)
+        cls._last_request_time = time.time()
+
+    @classmethod
+    def _make_api_call(cls, url: str):
+        """Método centralizado para llamadas API."""
+        cls._enforce_rate_limit()
+        response = requests.get(
+            url,
+            timeout=APIConfig.COINGECKO_TIMEOUT,
+            headers=APIConfig.REQUEST_HEADERS
+        )
+        response.raise_for_status()
+        return response.json()
