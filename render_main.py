@@ -130,7 +130,6 @@ async def run_bot():
         listen="0.0.0.0",
         port=int(os.getenv('PORT', 10000)),
         webhook_url=os.getenv('WEBHOOK_URL'),
-        secret_token=os.getenv('WEBHOOK_SECRET'),
         drop_pending_updates=True
     )
     
