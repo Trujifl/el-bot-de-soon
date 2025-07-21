@@ -1,103 +1,80 @@
 import requests
-import time
-from datetime import datetime
+from fuzzywuzzy import fuzz  # Para búsqueda aproximada
+from datetime import datetime, timedelta
 from src.config import APIConfig, logger
 
 class CoinGeckoAPI:
-    # Variables de clase para control de rate limit
-    _last_call_time = 0
-    _current_delay = 7  # Empezamos con 7 segundos (8-9 requests/min)
-    _max_delay = 60  # Máximo 60 segundos de delay
-    _cache = {}
-    _cache_ttl = 180  # Cache de 3 minutos
+    # Cache para lista de criptos (actualización cada 12 horas)
+    _CRYPTO_LIST_CACHE = None
+    _CRYPTO_LIST_LAST_UPDATED = None
+    _CRYPTO_LIST_TTL = timedelta(hours=12)
 
     @classmethod
-    def obtener_precio(cls, cripto_id: str) -> dict:
-        """Versión optimizada con gestión inteligente de rate limits"""
-        cripto_id = cripto_id.lower()
+    def _get_all_cryptos(cls):
+        """Obtiene todas las criptomonedas de CoinGecko con cache"""
+        if cls._CRYPTO_LIST_CACHE and datetime.now() - cls._CRYPTO_LIST_LAST_UPDATED < cls._CRYPTO_LIST_TTL:
+            return cls._CRYPTO_LIST_CACHE
+
+        url = f"{APIConfig.COINGECKO_URL}/coins/list"
+        response = requests.get(url, timeout=APIConfig.COINGECKO_TIMEOUT)
+        response.raise_for_status()
         
-        # 1. Primero verificar caché
-        cached_data = cls._check_cache(cripto_id)
-        if cached_data:
-            return cached_data
+        cls._CRYPTO_LIST_CACHE = response.json()
+        cls._CRYPTO_LIST_LAST_UPDATED = datetime.now()
+        return cls._CRYPTO_LIST_CACHE
 
-        # 2. Control de rate limit
-        cls._wait_for_next_call()
-
-        try:
-            # 3. Llamada a la API
-            url = f"{APIConfig.COINGECKO_URL}/simple/price?ids={cripto_id}&vs_currencies=usd&include_24hr_change=true"
-            response = cls._make_request(url)
-            price_data = response.json()
-
-            # 4. Validación básica
-            if not price_data.get(cripto_id):
-                raise ValueError("Datos de precio no recibidos")
-
-            # 5. Procesamiento (igual que antes)
-            precio = float(price_data[cripto_id]["usd"])
-            cambio_24h = float(price_data[cripto_id].get("usd_24h_change", 0))
+    @classmethod
+    def _find_best_match(cls, query: str):
+        """Encuentra la mejor coincidencia para una consulta"""
+        cryptos = cls._get_all_cryptos()
+        query = query.lower().strip()
+        
+        best_match = None
+        best_score = 0
+        
+        for crypto in cryptos:
+            # Busca en nombre (bitcoin), símbolo (btc) e id (bitcoin)
+            name_score = fuzz.ratio(query, crypto["name"].lower())
+            symbol_score = fuzz.ratio(query, crypto["symbol"].lower())
+            id_score = fuzz.ratio(query, crypto["id"].lower())
             
-            # 6. Armado de respuesta (sin cambios)
-            resultado = {
-                "nombre": cripto_id.capitalize(),
-                "simbolo": cripto_id.upper()[:3],
-                "precio": precio,
-                "cambio_24h": cambio_24h,
+            current_score = max(name_score, symbol_score, id_score)
+            if current_score > best_score:
+                best_score = current_score
+                best_match = crypto
+                if best_score == 100:  # Coincidencia perfecta
+                    break
+        
+        return best_match if best_score >= 50 else None  # Umbral mínimo 50%
+
+    @classmethod
+    def obtener_precio(cls, consulta: str) -> dict:
+        """Versión mejorada que reconoce cualquier cripto"""
+        try:
+            # Paso 1: Buscar la mejor coincidencia
+            crypto_match = cls._find_best_match(consulta)
+            if not crypto_match:
+                raise ValueError(f"Cripto no encontrada: '{consulta}'")
+            
+            # Paso 2: Obtener precio (tu implementación actual)
+            cripto_id = crypto_match["id"]
+            price_url = f"{APIConfig.COINGECKO_URL}/simple/price?ids={cripto_id}&vs_currencies=usd&include_24hr_change=true"
+            price_data = requests.get(price_url, timeout=APIConfig.COINGECKO_TIMEOUT).json()
+            
+            if cripto_id not in price_data:
+                raise ValueError("Datos de precio no disponibles")
+            
+            return {
+                "nombre": crypto_match["name"],
+                "simbolo": crypto_match["symbol"].upper(),
+                "precio": float(price_data[cripto_id]["usd"]),
+                "cambio_24h": float(price_data[cripto_id].get("usd_24h_change", 0)),
                 "ultima_actualizacion": datetime.now().strftime("%d/%m/%Y %H:%M")
             }
-
-            # 7. Actualizar caché
-            cls._cache[cripto_id] = (resultado, datetime.now())
-            cls._reduce_delay()  # Intentamos acelerar si hay éxito
-            return resultado
-
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                cls._increase_delay()
-                logger.warning(f"Rate limit alcanzado. Nuevo delay: {cls._current_delay}s")
-            raise ValueError(f"Error de API: {e}") from e
-
-    # --- Métodos auxiliares (nuevos) ---
-    @classmethod
-    def _check_cache(cls, cripto_id: str):
-        """Verifica si hay datos válidos en caché"""
-        if cripto_id in cls._cache:
-            data, timestamp = cls._cache[cripto_id]
-            if (datetime.now() - timestamp).total_seconds() < cls._cache_ttl:
-                logger.info(f"Usando caché para {cripto_id}")
-                return data
-        return None
-
-    @classmethod
-    def _wait_for_next_call(cls):
-        """Espera el tiempo necesario entre llamadas"""
-        elapsed = time.time() - cls._last_call_time
-        if elapsed < cls._current_delay:
-            wait_time = cls._current_delay - elapsed
-            time.sleep(wait_time)
-        cls._last_call_time = time.time()
-
-    @classmethod
-    def _make_request(cls, url: str):
-        """Método centralizado para requests con timeout"""
-        try:
-            response = requests.get(
-                url,
-                timeout=APIConfig.COINGECKO_TIMEOUT,
-                headers=APIConfig.REQUEST_HEADERS
-            )
-            response.raise_for_status()
-            return response
-        except requests.exceptions.Timeout:
-            raise ValueError("Timeout al conectar con CoinGecko")
-
-    @classmethod
-    def _increase_delay(cls):
-        """Aumenta el delay exponencialmente (hasta _max_delay)"""
-        cls._current_delay = min(cls._current_delay * 2, cls._max_delay)
-
-    @classmethod
-    def _reduce_delay(cls):
-        """Reduce el delay gradualmente cuando todo va bien"""
-        cls._current_delay = max(7, cls._current_delay * 0.9)  # Reduce 10%
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error de API: {str(e)}")
+            raise ValueError("Error al conectar con CoinGecko")
+        except Exception as e:
+            logger.error(f"Error al procesar '{consulta}': {str(e)}")
+            raise ValueError(f"No se pudo obtener precio para '{consulta}'")
