@@ -1,98 +1,97 @@
+# render_main.py - Versión definitiva con filtro IP
 from flask import Flask, request, Response
 from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
-    CallbackQueryHandler
+    MessageHandler,
+    filters,
+    CallbackQueryHandler,
+    ContextTypes
 )
 import asyncio
 import logging
 import ipaddress
+import os
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
-    PORT,
     logger,
     BotMeta
 )
+from src.handlers.base import setup_base_handlers
+from src.handlers.crypto import precio_cripto
+from src.handlers.post import PostHandler
+from src.handlers.resume import ResumeHandler
 
 app = Flask(__name__)
 
-# Rangos IP permitidos (Telegram + Render internas)
-ALLOWED_IPS = [
+# Configuración IPs permitidas (Telegram + Render internas)
+ALLOWED_NETS = [
     ipaddress.ip_network('149.154.160.0/20'),  # Telegram
     ipaddress.ip_network('91.108.4.0/22'),     # Telegram
-    ipaddress.ip_network('127.0.0.0/8')        # Localhost (Render internas)
+    ipaddress.ip_network('127.0.0.0/8')        # Render health checks
 ]
 
-# Configuración de la aplicación
-application = Application.builder().token(TOKEN).updater(None).build()
-
-# Filtro de IP mejorado
+# Filtro de IP seguro
 @app.before_request
-def verify_ip():
+def filter_ips():
     client_ip = ipaddress.ip_address(request.remote_addr)
-    if not any(client_ip in net for net in ALLOWED_IPS):
+    if not any(client_ip in net for net in ALLOWED_NETS):
         logger.warning(f"Acceso denegado desde IP: {client_ip}")
         return "IP no autorizada", 403
 
-# Health Check especial para Render
-@app.route('/')
-def health_check():
-    return f"{BotMeta.NAME} ✅", 200
+# Configuración de la aplicación
+application = Application.builder().token(TOKEN).build()
 
-# Webhook optimizado
+# Handlers esenciales
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /start"""
+    await update.message.reply_text(
+        f"🚀 ¡Hola! Soy {BotMeta.NAME}\n"
+        "Escribe /help para ver mis comandos"
+    )
+
+def setup_handlers():
+    # Comandos básicos
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_cmd))
+    
+    # Handlers personalizados
+    setup_base_handlers(application)
+    application.add_handler(CommandHandler("precio", precio_cripto))
+    application.add_handler(CommandHandler("post", PostHandler().handle))
+    application.add_handler(CommandHandler("resumen_texto", ResumeHandler().handle_resumen_texto))
+    application.add_handler(CommandHandler("resumen_url", ResumeHandler().handle_resumen_url))
+    
+    # Manejo de mensajes no reconocidos
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        lambda u, c: u.message.reply_text("No entendí. Usa /help")
+    ))
+
+# Webhook mejorado
 @app.route('/webhook', methods=['POST'])
-def webhook():
+async def webhook():
     try:
-        update = Update.de_json(request.json, application.bot)
-        
-        async def process_update():
-            await application.update_queue.put(update)
-            logger.info(f"Procesado update {update.update_id}")
-            return "OK", 200
-            
-        response, status = asyncio.run(process_update())
-        return Response(response, status=status)
-
+        update = Update.de_json(await request.get_json(), application.bot)
+        await application.process_update(update)
+        return "", 200  # Respuesta vacía para ahorrar ancho de banda
     except Exception as e:
         logger.error(f"Error en webhook: {str(e)}")
         return "Error", 500
 
+@app.route('/')
+def health_check():
+    return f"{BotMeta.NAME} operativo", 200
+
 if __name__ == '__main__':
-    from src.handlers import setup_base_handlers
-    from src.handlers.crypto import precio_cripto
-    from src.handlers.post import PostHandler
-    from src.handlers.resume import ResumeHandler
-    
-    # Configuración de handlers
-    post_handler = PostHandler()
-    resume_handler = ResumeHandler()
-    
-    def setup_handlers():
-        setup_base_handlers(application)
-        application.add_handler(CommandHandler("precio", precio_cripto))
-        application.add_handler(CommandHandler("post", post_handler.handle))
-        application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
-        application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
-        application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
-    
     setup_handlers()
     
-    # Configura comandos y webhook
-    async def startup():
-        await application.bot.set_my_commands([
-            BotCommand("start", "Inicia el bot"),
-            BotCommand("precio", "Precio de criptos"),
-            BotCommand("post", "Crear post"),
-            BotCommand("resumen_texto", "Resumir texto (IA)"),
-            BotCommand("resumen_url", "Resumir URL (IA)")
-        ])
-        await application.start_webhook(
-            listen="0.0.0.0",
-            port=int(PORT),
-            webhook_url=f"https://el-bot-de-soon.onrender.com/webhook",
-            drop_pending_updates=True
-        )
-        await application.idle()
-    
-    asyncio.run(startup())
+    # Configuración de webhook para producción
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv('PORT', 10000)),
+        webhook_url=os.getenv('WEBHOOK_URL'),
+        secret_token=os.getenv('WEBHOOK_SECRET'),
+        drop_pending_updates=True
+    )
