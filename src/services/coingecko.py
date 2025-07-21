@@ -23,54 +23,64 @@ class CoinGeckoAPI:
 
     @classmethod
     def obtener_precio(cls, consulta: str) -> dict:
-        """Obtiene el precio de una criptomoneda desde CoinGecko con caché y control de límites"""
-        try:
-            cache_key = consulta.lower()
-            if cache_key in cls._PRICE_CACHE:
-                data, timestamp = cls._PRICE_CACHE[cache_key]
-                if datetime.now() - timestamp < cls._PRICE_CACHE_TTL:
-                    return data
+        cache_key = consulta.lower()
 
-            cripto_id = crypto_mapper.find_coin(consulta)
-            if not cripto_id:
-                raise ValueError(f"No se pudo reconocer la cripto '{consulta}'")
+        # 🧠 Usar caché si está disponible y fresca
+        if cache_key in cls._PRICE_CACHE:
+            data, timestamp = cls._PRICE_CACHE[cache_key]
+            if datetime.now() - timestamp < cls._PRICE_CACHE_TTL:
+                return data
 
+        cripto_id = crypto_mapper.find_coin(consulta)
+        if not cripto_id:
+            raise ValueError(f"No se pudo reconocer la cripto '{consulta}'")
+
+        def fetch_price():
             cls._enforce_rate_limit()
-
             price_url = (
                 f"{APIConfig.COINGECKO_URL}/simple/price?"
                 f"ids={cripto_id}&vs_currencies=usd&include_24hr_change=true"
             )
-            price_response = requests.get(
+            response = requests.get(
                 price_url,
                 timeout=APIConfig.COINGECKO_TIMEOUT,
                 headers=APIConfig.REQUEST_HEADERS
             )
-            price_response.raise_for_status()
-            price_data = price_response.json()
+            response.raise_for_status()
+            return response.json()
 
-            if cripto_id not in price_data:
-                raise ValueError("Datos de precio no recibidos")
-
-            resultado = {
-                "nombre": cripto_id.replace("-", " ").title(),
-                "simbolo": consulta.upper(),
-                "precio": float(price_data[cripto_id]["usd"]),
-                "cambio_24h": float(price_data[cripto_id].get("usd_24h_change", 0)),
-                "ultima_actualizacion": datetime.now().strftime("%d/%m/%Y %H:%M")
-            }
-
-            cls._PRICE_CACHE[cache_key] = (resultado, datetime.now())
-            cls._current_delay = max(cls._BASE_DELAY, cls._current_delay * 0.9)
-
-            return resultado
-
+        try:
+            price_data = fetch_price()
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:
                 cls._current_delay = min(cls._MAX_DELAY, cls._current_delay * 2)
                 logger.warning(f"Rate limit alcanzado. Delay aumentado a {cls._current_delay}s")
-            raise ValueError(f"Error de API: {str(e)}")
-
+                time.sleep(cls._current_delay)
+                try:
+                    price_data = fetch_price()
+                except Exception as retry_error:
+                    if cache_key in cls._PRICE_CACHE:
+                        logger.warning("Usando precio en caché tras fallo 429")
+                        return cls._PRICE_CACHE[cache_key][0]
+                    raise ValueError("CoinGecko está limitando consultas. Intenta más tarde.")
+            else:
+                raise ValueError(f"Error de API: {str(e)}")
         except Exception as e:
-            logger.error(f"Error al procesar '{consulta}': {str(e)}")
-            raise ValueError(f"No se pudo obtener precio para '{consulta}'")
+            logger.error(f"Error inesperado: {str(e)}")
+            raise ValueError("No se pudo obtener el precio actual.")
+
+        if cripto_id not in price_data:
+            raise ValueError("CoinGecko no devolvió datos para esta cripto.")
+
+        resultado = {
+            "nombre": cripto_id.replace("-", " ").title(),
+            "simbolo": consulta.upper(),
+            "precio": float(price_data[cripto_id]["usd"]),
+            "cambio_24h": float(price_data[cripto_id].get("usd_24h_change", 0)),
+            "ultima_actualizacion": datetime.now().strftime("%d/%m/%Y %H:%M")
+        }
+
+        cls._PRICE_CACHE[cache_key] = (resultado, datetime.now())
+        cls._current_delay = max(cls._BASE_DELAY, cls._current_delay * 0.9)
+
+        return resultado
