@@ -10,7 +10,6 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from openai import OpenAI  # Solo si usas OpenAI (puedes eliminarlo si no)
 
 # Configuración básica
 logging.basicConfig(
@@ -19,19 +18,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- Handlers Principales (modificados para ser gratuitos) ---
+# --- Handlers Principales ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja el comando /start"""
     await update.message.reply_text(
-        "🤖 Bot Gratuito Activo\n\n"
+        "🤖 Bot Cripto Activo\n\n"
         "Comandos disponibles:\n"
-        "/precio [cripto] - Consultar precio (ej: /precio bitcoin)\n"
-        "/echo [texto] - Repite tu texto\n"
+        "/precio [cripto] - Consultar precio\n"
+        "/echo [texto] - Repetir texto\n"
         "/help - Mostrar ayuda"
     )
 
 async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Consulta precios de criptomonedas (usando CoinGecko API gratuita)"""
+    """Consulta precios de criptomonedas usando CoinGecko API"""
     try:
         cripto = context.args[0].lower() if context.args else "bitcoin"
         response = requests.get(
@@ -58,7 +57,7 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Error al consultar. Intenta más tarde.")
 
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Repite el texto del usuario (gratuito)"""
+    """Repite el texto del usuario"""
     text = ' '.join(context.args)
     if text:
         await update.message.reply_text(f"🔹 {text}")
@@ -67,7 +66,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Configuración de la Aplicación ---
 def setup_application():
-    """Configura la aplicación con handlers gratuitos"""
+    """Configura la aplicación con handlers"""
     application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
     
     # Comandos
@@ -84,31 +83,39 @@ def setup_application():
     
     return application
 
-# --- Ejecución Principal (modificada para Render) ---
+# --- Ejecución Principal ---
 async def run_bot():
     application = setup_application()
-    PORT = int(os.getenv('PORT', 10000))  # Render usa el puerto 10000 por defecto
+    PORT = int(os.getenv('PORT', 10000))  # Render usa el puerto 10000
     
     try:
         await application.initialize()
         await application.start()
         
-        # Configuración CRÍTICA para Render:
+        # Configuración CRÍTICA para Render
         await application.updater.start_webhook(
             listen="0.0.0.0",  # Escucha en todas las interfaces
             port=PORT,
-            webhook_url=os.getenv('WEBHOOK_URL') + "/webhook",  # ¡Obligatorio!
+            webhook_url=os.getenv('WEBHOOK_URL').rstrip('/') + "/webhook",
             secret_token=os.getenv('WEBHOOK_SECRET'),
-            drop_pending_updates=True
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES
         )
         
-        logger.info(f"✅ Bot activo en puerto {PORT} (Webhook: {os.getenv('WEBHOOK_URL')}/webhook)")
-        await asyncio.Event().wait()  # Mantiene el bot en ejecución
+        logger.info(f"✅ Bot activo en puerto {PORT}")
+        logger.info(f"🔄 Webhook configurado en: {os.getenv('WEBHOOK_URL')}/webhook")
         
+        # Mantiene el bot en ejecución
+        while True:
+            await asyncio.sleep(3600)  # Espera 1 hora
+            
+    except asyncio.CancelledError:
+        logger.info("🔁 Reconectando...")
     except Exception as e:
         logger.error(f"❌ Error fatal: {str(e)}")
     finally:
         await application.stop()
+        logger.info("🛑 Bot detenido correctamente")
 
 if __name__ == '__main__':
     try:
