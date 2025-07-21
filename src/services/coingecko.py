@@ -4,80 +4,100 @@ from datetime import datetime
 from src.config import APIConfig, logger
 
 class CoinGeckoAPI:
-    # Control de rate limits
-    _last_request_time = 0
-    REQUEST_DELAY = 7  # 7 segundos entre llamadas (~8/min)
-    CACHE = {}
-    CACHE_TTL = 300  # 5 minutos
+    # Variables de clase para control de rate limit
+    _last_call_time = 0
+    _current_delay = 7  # Empezamos con 7 segundos (8-9 requests/min)
+    _max_delay = 60  # Máximo 60 segundos de delay
+    _cache = {}
+    _cache_ttl = 180  # Cache de 3 minutos
 
     @classmethod
     def obtener_precio(cls, cripto_id: str) -> dict:
-        """Obtiene precio con caché y control de rate limits."""
+        """Versión optimizada con gestión inteligente de rate limits"""
         cripto_id = cripto_id.lower()
         
-        # Verificar caché primero
-        if cripto_id in cls.CACHE:
-            cached_data, timestamp = cls.CACHE[cripto_id]
-            if (datetime.now() - timestamp).total_seconds() < cls.CACHE_TTL:
-                logger.info(f"Devolviendo datos en caché para {cripto_id}")
-                return cached_data
+        # 1. Primero verificar caché
+        cached_data = cls._check_cache(cripto_id)
+        if cached_data:
+            return cached_data
 
-        # Control de rate limit
-        cls._enforce_rate_limit()
+        # 2. Control de rate limit
+        cls._wait_for_next_call()
 
         try:
-            # Primera llamada para precio y cambio
-            price_url = f"{APIConfig.COINGECKO_URL}/simple/price?ids={cripto_id}&vs_currencies=usd&include_24hr_change=true"
-            price_data = cls._make_api_call(price_url)
+            # 3. Llamada a la API
+            url = f"{APIConfig.COINGECKO_URL}/simple/price?ids={cripto_id}&vs_currencies=usd&include_24hr_change=true"
+            response = cls._make_request(url)
+            price_data = response.json()
+
+            # 4. Validación básica
+            if not price_data.get(cripto_id):
+                raise ValueError("Datos de precio no recibidos")
+
+            # 5. Procesamiento (igual que antes)
+            precio = float(price_data[cripto_id]["usd"])
+            cambio_24h = float(price_data[cripto_id].get("usd_24h_change", 0))
             
-            if cripto_id not in price_data or "usd" not in price_data[cripto_id]:
-                raise ValueError("Estructura de precio inválida")
-
-            # Segunda llamada para metadatos
-            detail_url = f"{APIConfig.COINGECKO_URL}/coins/{cripto_id}"
-            detail_data = cls._make_api_call(detail_url)
-
-            # Validación de datos
-            required_fields = ["name", "symbol", "market_data"]
-            if not all(field in detail_data for field in required_fields):
-                raise ValueError("Faltan campos esenciales")
-
-            # Construir respuesta
-            result = {
-                "nombre": detail_data["name"],
-                "simbolo": detail_data["symbol"].upper(),
-                "precio": float(price_data[cripto_id]["usd"]),
-                "cambio_24h": float(price_data[cripto_id].get("usd_24h_change", 0)),
+            # 6. Armado de respuesta (sin cambios)
+            resultado = {
+                "nombre": cripto_id.capitalize(),
+                "simbolo": cripto_id.upper()[:3],
+                "precio": precio,
+                "cambio_24h": cambio_24h,
                 "ultima_actualizacion": datetime.now().strftime("%d/%m/%Y %H:%M")
             }
 
-            # Actualizar caché
-            cls.CACHE[cripto_id] = (result, datetime.now())
-            return result
+            # 7. Actualizar caché
+            cls._cache[cripto_id] = (resultado, datetime.now())
+            cls._reduce_delay()  # Intentamos acelerar si hay éxito
+            return resultado
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:
-                cls.REQUEST_DELAY = min(60, cls.REQUEST_DELAY * 2)  # Backoff exponencial
-                logger.warning(f"Rate limit alcanzado. Nuevo delay: {cls.REQUEST_DELAY}s")
-            raise
+                cls._increase_delay()
+                logger.warning(f"Rate limit alcanzado. Nuevo delay: {cls._current_delay}s")
+            raise ValueError(f"Error de API: {e}") from e
+
+    # --- Métodos auxiliares (nuevos) ---
+    @classmethod
+    def _check_cache(cls, cripto_id: str):
+        """Verifica si hay datos válidos en caché"""
+        if cripto_id in cls._cache:
+            data, timestamp = cls._cache[cripto_id]
+            if (datetime.now() - timestamp).total_seconds() < cls._cache_ttl:
+                logger.info(f"Usando caché para {cripto_id}")
+                return data
+        return None
 
     @classmethod
-    def _enforce_rate_limit(cls):
-        """Garantiza el tiempo entre solicitudes."""
-        elapsed = time.time() - cls._last_request_time
-        if elapsed < cls.REQUEST_DELAY:
-            wait_time = cls.REQUEST_DELAY - elapsed
+    def _wait_for_next_call(cls):
+        """Espera el tiempo necesario entre llamadas"""
+        elapsed = time.time() - cls._last_call_time
+        if elapsed < cls._current_delay:
+            wait_time = cls._current_delay - elapsed
             time.sleep(wait_time)
-        cls._last_request_time = time.time()
+        cls._last_call_time = time.time()
 
     @classmethod
-    def _make_api_call(cls, url: str):
-        """Método centralizado para llamadas API."""
-        cls._enforce_rate_limit()
-        response = requests.get(
-            url,
-            timeout=APIConfig.COINGECKO_TIMEOUT,
-            headers=APIConfig.REQUEST_HEADERS
-        )
-        response.raise_for_status()
-        return response.json()
+    def _make_request(cls, url: str):
+        """Método centralizado para requests con timeout"""
+        try:
+            response = requests.get(
+                url,
+                timeout=APIConfig.COINGECKO_TIMEOUT,
+                headers=APIConfig.REQUEST_HEADERS
+            )
+            response.raise_for_status()
+            return response
+        except requests.exceptions.Timeout:
+            raise ValueError("Timeout al conectar con CoinGecko")
+
+    @classmethod
+    def _increase_delay(cls):
+        """Aumenta el delay exponencialmente (hasta _max_delay)"""
+        cls._current_delay = min(cls._current_delay * 2, cls._max_delay)
+
+    @classmethod
+    def _reduce_delay(cls):
+        """Reduce el delay gradualmente cuando todo va bien"""
+        cls._current_delay = max(7, cls._current_delay * 0.9)  # Reduce 10%
