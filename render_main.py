@@ -64,5 +64,6 @@ def health_check():
 
 if __name__ == '__main__':
     setup_handlers()
-    application.run_polling()  # Solo para desarrollo local
+    iniciar_actualizador()
+    application.run_polling()  
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
