@@ -1,110 +1,75 @@
-import os
-import logging
-import asyncio
-import requests
+# render_main.py - Versión final funcional
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     filters,
+    CallbackQueryHandler,
     ContextTypes
 )
-
-# Configuración básica
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+from telegram import BotCommand
+import os
+import logging
+from src.config import (
+    TELEGRAM_TOKEN as TOKEN,
+    logger,
+    BotMeta
 )
-logger = logging.getLogger(__name__)
+from src.handlers.base import setup_base_handlers
+from src.handlers.crypto import precio_cripto
+from src.handlers.post import PostHandler
+from src.handlers.resume import ResumeHandler
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🤖 Bot Activo\n\n"
-        "Comandos disponibles:\n"
-        "/precio [cripto] - Consultar precio\n"
-        "/echo [texto] - Repetir texto\n"
-        "/help - Ayuda"
-    )
+# Configuración inicial
+app = Flask(__name__)
+post_handler = PostHandler()
+resume_handler = ResumeHandler()
 
-async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        cripto = context.args[0].lower() if context.args else "bitcoin"
-        response = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price",
-            params={
-                "ids": cripto,
-                "vs_currencies": "usd",
-                "include_24hr_change": "true"
-            },
-            timeout=10
-        )
-        data = response.json()
-        
-        if cripto in data:
-            await update.message.reply_text(
-                f"📊 {cripto.upper()}\n"
-                f"Precio: ${data[cripto]['usd']:,.2f}\n"
-                f"24h: {data[cripto]['usd_24h_change']:.2f}%"
-            )
-        else:
-            await update.message.reply_text("⚠️ Criptomoneda no encontrada")
-    except Exception as e:
-        logger.error(f"Error en precio_cripto: {e}")
-        await update.message.reply_text("❌ Error al consultar precio")
+# Crea UNA instancia global de la aplicación
+application = Application.builder().token(TOKEN).build()
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = ' '.join(context.args)
-    if text:
-        await update.message.reply_text(f"🔹 {text}")
-    else:
-        await update.message.reply_text("ℹ️ Uso: /echo [texto]")
+# Configura los comandos del bot
+async def set_commands():
+    commands = [
+        BotCommand("start", "Inicia el bot"),
+        BotCommand("help", "Muestra ayuda"),
+        BotCommand("precio", "Consulta precio de cripto"),
+        BotCommand("post", "Crea un post para el canal"),
+        BotCommand("resumen_texto", "Resume un texto en español"),
+        BotCommand("resumen_url", "Resume una página web en español")
+    ]
+    await application.bot.set_my_commands(commands)
 
-def setup_application():
-    application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
-    
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", start))
+# Configura todos los handlers
+def setup_handlers():
+    setup_base_handlers(application)
     application.add_handler(CommandHandler("precio", precio_cripto))
-    application.add_handler(CommandHandler("echo", echo))
-    
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        lambda u, c: u.message.reply_text("Usa /help para ver comandos")
-    ))
-    
-    return application
+    application.add_handler(CommandHandler("post", post_handler.handle))
+    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
+    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
+    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
-async def run_bot():
-    application = setup_application()
-    PORT = int(os.getenv('PORT', 10000))
-    
+# Endpoint para webhooks
+@app.route('/webhook', methods=['POST'])
+async def webhook():
     try:
-        await application.initialize()
-        await application.start()
-        
-        # Configuración webhook mejorada
-        await application.updater.start_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            webhook_url=os.getenv('WEBHOOK_URL').rstrip('/') + "/webhook",
-            secret_token=os.getenv('WEBHOOK_SECRET'),
-            drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES
-        )
-        
-        logger.info(f"✅ Bot escuchando en puerto {PORT}")
-        await asyncio.Event().wait()
-        
+        update = Update.de_json(request.json, application.bot)
+        await application.update_queue.put(update)
+        logger.info(f"[{BotMeta.NAME}] Update procesado")
+        return "OK", 200
     except Exception as e:
-        logger.error(f"❌ Error: {e}")
-    finally:
-        await application.stop()
+        logger.error(f"Error en webhook: {e}")
+        return "Error", 500
 
+# Health check
+@app.route('/')
+def health_check():
+    return f"{BotMeta.NAME} está activo ✅", 200
+
+# Inicialización (se ejecuta solo al iniciar el servidor)
 if __name__ == '__main__':
-    try:
-        asyncio.run(run_bot())
-    except KeyboardInterrupt:
-        logger.info("🛑 Bot detenido manualmente")
-    except Exception as e:
-        logger.error(f"❌ Error no manejado: {e}")
+    setup_handlers()
+    application.run_polling()  # Solo para desarrollo local
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
