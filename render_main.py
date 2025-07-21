@@ -27,9 +27,6 @@ ALLOWED_NETS = [
     ipaddress.ip_network('127.0.0.0/8')        # Render
 ]
 
-# Inicialización global de la aplicación
-application = Application.builder().token(TOKEN).build()
-
 # Filtro de IP
 @app.before_request
 def filter_ips():
@@ -38,22 +35,33 @@ def filter_ips():
         logger.warning(f"Acceso denegado desde IP: {client_ip}")
         return "IP no autorizada", 403
 
-# Handlers básicos
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"¡Hola! Soy {BotMeta.NAME} {BotMeta.EMOJI}")
+# Creamos una instancia de Application
+def create_application():
+    application = Application.builder().token(TOKEN).build()
+    
+    # Handlers básicos
+    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(f"¡Hola! Soy {BotMeta.NAME} {BotMeta.EMOJI}")
 
-def setup_handlers():
     application.add_handler(CommandHandler("start", start))
-    # Agrega aquí tus otros handlers
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         lambda u, c: u.message.reply_text("Usa /start para comenzar")
     ))
+    
+    return application
 
-# Webhook corregido
+# Variable global para la aplicación
+application = create_application()
+
+# Webhook corregido con inicialización segura
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
+        if not application.running:
+            await application.initialize()
+            await application.start()
+            
         json_data = request.get_json()
         update = Update.de_json(json_data, application.bot)
         await application.process_update(update)
@@ -66,9 +74,8 @@ async def webhook():
 def health_check():
     return f"{BotMeta.NAME} ✅", 200
 
-async def main():
+async def run_webhook():
     await application.initialize()
-    setup_handlers()
     await application.start()
     await application.updater.start_webhook(
         listen="0.0.0.0",
@@ -81,8 +88,10 @@ async def main():
 
 if __name__ == '__main__':
     try:
-        asyncio.run(main())
+        asyncio.run(run_webhook())
     except KeyboardInterrupt:
-        logger.info("Apagando el bot...")
+        logger.info("Deteniendo el bot...")
     except Exception as e:
         logger.error(f"Error fatal: {str(e)}", exc_info=True)
+    finally:
+        asyncio.run(application.stop())
