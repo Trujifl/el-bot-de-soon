@@ -1,12 +1,10 @@
-# render_main.py - Versión final funcionando
 from flask import Flask, request, Response
-from telegram import Update, BotCommand
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     filters,
-    CallbackQueryHandler,
     ContextTypes
 )
 import asyncio
@@ -18,11 +16,8 @@ from src.config import (
     logger,
     BotMeta
 )
-from src.handlers.base import setup_base_handlers
-from src.handlers.crypto import precio_cripto
-from src.handlers.post import PostHandler
-from src.handlers.resume import ResumeHandler
 
+# Configuración inicial
 app = Flask(__name__)
 
 # Rangos IP permitidos
@@ -32,6 +27,9 @@ ALLOWED_NETS = [
     ipaddress.ip_network('127.0.0.0/8')        # Render
 ]
 
+# Inicialización global de la aplicación
+application = Application.builder().token(TOKEN).build()
+
 # Filtro de IP
 @app.before_request
 def filter_ips():
@@ -40,31 +38,17 @@ def filter_ips():
         logger.warning(f"Acceso denegado desde IP: {client_ip}")
         return "IP no autorizada", 403
 
-# Inicialización correcta de la aplicación
-application = None
+# Handlers básicos
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"¡Hola! Soy {BotMeta.NAME} {BotMeta.EMOJI}")
 
-async def initialize_app():
-    global application
-    application = Application.builder().token(TOKEN).build()
-    
-    # Configuración de handlers
-    async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(f"¡Hola! Soy {BotMeta.NAME} {BotMeta.EMOJI}")
-
+def setup_handlers():
     application.add_handler(CommandHandler("start", start))
-    setup_base_handlers(application)
-    application.add_handler(CommandHandler("precio", precio_cripto))
-    application.add_handler(CommandHandler("post", PostHandler().handle))
-    application.add_handler(CommandHandler("resumen_texto", ResumeHandler().handle_resumen_texto))
-    application.add_handler(CommandHandler("resumen_url", ResumeHandler().handle_resumen_url))
+    # Agrega aquí tus otros handlers
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND,
-        lambda u, c: u.message.reply_text("Usa /help para ver comandos")
+        lambda u, c: u.message.reply_text("Usa /start para comenzar")
     ))
-
-    await application.initialize()  # Inicialización explícita
-    await application.start()
-    return application
 
 # Webhook corregido
 @app.route('/webhook', methods=['POST'])
@@ -75,24 +59,30 @@ async def webhook():
         await application.process_update(update)
         return "", 200
     except Exception as e:
-        logger.error(f"Webhook error: {str(e)}")
+        logger.error(f"Webhook error: {str(e)}", exc_info=True)
         return "Error", 500
 
 @app.route('/')
 def health_check():
     return f"{BotMeta.NAME} ✅", 200
 
-if __name__ == '__main__':
-    # Inicialización asíncrona correcta
-    loop = asyncio.get_event_loop()
-    application = loop.run_until_complete(initialize_app())
-    
-    # Configuración webhook
-    loop.run_until_complete(application.updater.start_webhook(
+async def main():
+    await application.initialize()
+    setup_handlers()
+    await application.start()
+    await application.updater.start_webhook(
         listen="0.0.0.0",
         port=int(os.getenv('PORT', 10000)),
         webhook_url=os.getenv('WEBHOOK_URL'),
         secret_token=os.getenv('WEBHOOK_SECRET'),
         drop_pending_updates=True
-    ))
-    loop.run_forever()
+    )
+    await asyncio.Event().wait()  # Ejecución infinita
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Apagando el bot...")
+    except Exception as e:
+        logger.error(f"Error fatal: {str(e)}", exc_info=True)
