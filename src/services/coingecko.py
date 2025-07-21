@@ -3,6 +3,7 @@ import time
 from datetime import datetime, timedelta
 from src.config import APIConfig, logger
 from src.services.crypto_mapper import crypto_mapper
+from src.services.price_updater import get_precio_desde_cache
 
 class CoinGeckoAPI:
     _BASE_DELAY = 12  
@@ -15,7 +16,6 @@ class CoinGeckoAPI:
 
     @classmethod
     def _enforce_rate_limit(cls):
-        """Aplica delay para evitar ser bloqueado por CoinGecko"""
         elapsed = time.time() - cls._last_call_time
         if elapsed < cls._current_delay:
             time.sleep(cls._current_delay - elapsed)
@@ -23,9 +23,14 @@ class CoinGeckoAPI:
 
     @classmethod
     def obtener_precio(cls, consulta: str) -> dict:
+        # ✅ Primero intentamos usar el caché compartido de price_updater
+        datos = get_precio_desde_cache(consulta)
+        if datos:
+            return datos
+
         cache_key = consulta.lower()
 
-        # 🧠 Usar caché si está disponible y fresca
+        # Luego el caché privado de esta clase
         if cache_key in cls._PRICE_CACHE:
             data, timestamp = cls._PRICE_CACHE[cache_key]
             if datetime.now() - timestamp < cls._PRICE_CACHE_TTL:
@@ -84,3 +89,4 @@ class CoinGeckoAPI:
         cls._current_delay = max(cls._BASE_DELAY, cls._current_delay * 0.9)
 
         return resultado
+
