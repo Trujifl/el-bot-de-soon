@@ -2,46 +2,40 @@ import os
 import logging
 import asyncio
 import requests
-from telegram import Update, BotCommand
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     filters,
-    ContextTypes,
-    CallbackQueryHandler
+    ContextTypes
 )
-from openai import OpenAI
+from openai import OpenAI  # Solo si usas OpenAI (puedes eliminarlo si no)
 
-# Configuración básica de logs
+# Configuración básica
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Configuración de APIs
-COINGECKO_API = "https://api.coingecko.com/api/v3"
-OPENAI_CLIENT = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-
-# --- Handlers Principales ---
+# --- Handlers Principales (modificados para ser gratuitos) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja el comando /start"""
     await update.message.reply_text(
-        "🤖 Bot Cripto-IA Activo\n\n"
+        "🤖 Bot Gratuito Activo\n\n"
         "Comandos disponibles:\n"
-        "/precio [cripto] - Consultar precio\n"
-        "/resumen [texto] - Resumen con IA\n"
-        "/post - Crear publicación\n"
+        "/precio [cripto] - Consultar precio (ej: /precio bitcoin)\n"
+        "/echo [texto] - Repite tu texto\n"
         "/help - Mostrar ayuda"
     )
 
 async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Consulta precios de criptomonedas"""
+    """Consulta precios de criptomonedas (usando CoinGecko API gratuita)"""
     try:
         cripto = context.args[0].lower() if context.args else "bitcoin"
         response = requests.get(
-            f"{COINGECKO_API}/simple/price",
+            "https://api.coingecko.com/api/v3/simple/price",
             params={
                 "ids": cripto,
                 "vs_currencies": "usd",
@@ -58,54 +52,29 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"24h: {data[cripto]['usd_24h_change']:.2f}%"
             )
         else:
-            await update.message.reply_text("⚠️ Criptomoneda no encontrada")
+            await update.message.reply_text("⚠️ Criptomoneda no encontrada. Ejemplo: /precio bitcoin")
     except Exception as e:
         logger.error(f"Error en precio_cripto: {str(e)}")
-        await update.message.reply_text("❌ Error al consultar precio")
+        await update.message.reply_text("❌ Error al consultar. Intenta más tarde.")
 
-async def resumen_ia(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Genera resumen con OpenAI"""
-    try:
-        texto = " ".join(context.args)
-        if not texto:
-            await update.message.reply_text("ℹ️ Uso: /resumen [texto a resumir]")
-            return
-            
-        response = OPENAI_CLIENT.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{
-                "role": "user",
-                "content": f"Resume esto en 3 puntos clave:\n{texto}"
-            }],
-            max_tokens=150
-        )
-        
-        await update.message.reply_text(
-            f"📝 Resumen IA:\n{response.choices[0].message.content}"
-        )
-    except Exception as e:
-        logger.error(f"Error en resumen_ia: {str(e)}")
-        await update.message.reply_text("❌ Error al generar resumen")
-
-async def post_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja la creación de posts"""
-    try:
-        await update.message.reply_text("✏️ Envía el contenido de tu post:")
-    except Exception as e:
-        logger.error(f"Error en post_handler: {str(e)}")
-        await update.message.reply_text("❌ Error al crear post")
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Repite el texto del usuario (gratuito)"""
+    text = ' '.join(context.args)
+    if text:
+        await update.message.reply_text(f"🔹 {text}")
+    else:
+        await update.message.reply_text("ℹ️ Uso: /echo [texto]")
 
 # --- Configuración de la Aplicación ---
 def setup_application():
-    """Configura todos los handlers"""
+    """Configura la aplicación con handlers gratuitos"""
     application = Application.builder().token(os.getenv('TELEGRAM_TOKEN')).build()
     
-    # Comandos principales
+    # Comandos
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", start))
     application.add_handler(CommandHandler("precio", precio_cripto))
-    application.add_handler(CommandHandler("resumen", resumen_ia))
-    application.add_handler(CommandHandler("post", post_handler))
+    application.add_handler(CommandHandler("echo", echo))
     
     # Mensajes no reconocidos
     application.add_handler(MessageHandler(
@@ -115,27 +84,26 @@ def setup_application():
     
     return application
 
-# --- Ejecución Principal ---
+# --- Ejecución Principal (modificada para Render) ---
 async def run_bot():
     application = setup_application()
-    port = int(os.getenv('PORT', 10000))
-    webhook_url = os.getenv('WEBHOOK_URL') + "/webhook"  # ¡Ruta /webhook obligatoria!
+    PORT = int(os.getenv('PORT', 10000))  # Render usa el puerto 10000 por defecto
     
     try:
         await application.initialize()
         await application.start()
         
-        # Configuración del webhook con ruta específica
+        # Configuración CRÍTICA para Render:
         await application.updater.start_webhook(
-            listen="0.0.0.0",
-            port=port,
-            webhook_url=webhook_url,
+            listen="0.0.0.0",  # Escucha en todas las interfaces
+            port=PORT,
+            webhook_url=os.getenv('WEBHOOK_URL') + "/webhook",  # ¡Obligatorio!
             secret_token=os.getenv('WEBHOOK_SECRET'),
             drop_pending_updates=True
         )
         
-        logger.info(f"✅ Bot activo en {webhook_url} (Puerto: {port})")
-        await asyncio.Event().wait()  # Ejecución infinita
+        logger.info(f"✅ Bot activo en puerto {PORT} (Webhook: {os.getenv('WEBHOOK_URL')}/webhook)")
+        await asyncio.Event().wait()  # Mantiene el bot en ejecución
         
     except Exception as e:
         logger.error(f"❌ Error fatal: {str(e)}")
