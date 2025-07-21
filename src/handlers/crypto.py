@@ -1,5 +1,5 @@
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 from src.services.coingecko import CoinGeckoAPI  
 from src.services.crypto_mapper import crypto_mapper  
 from src.config import logger
