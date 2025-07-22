@@ -1,5 +1,6 @@
 from src.handlers.token_query import handle_consulta_token
 from src.services.openai import generar_respuesta_ia
+from src.services.crypto_mapper import crypto_mapper
 import os
 import traceback
 
@@ -20,29 +21,9 @@ async def recibir(update, context):
     chat_type = update.effective_chat.type
     texto = update.message.text or ""
 
-    # ⚙️ Obtener nombre de usuario del bot
-    me = await context.bot.get_me()
-    bot_username = me.username.lower()
-
-    # 🧠 Revisar mención explícita o respuesta directa
-    texto_original = texto or ""
-    mencion_directa = any(
-        ent.type == "mention" and texto_original[ent.offset:ent.offset + ent.length].lower() == f"@{bot_username}"
-        for ent in update.message.entities or []
-    )
-
-    respuesta_al_bot = (
-        update.message.reply_to_message
-        and update.message.reply_to_message.from_user
-        and update.message.reply_to_message.from_user.id == me.id
-    )
-
     if chat_type in ["group", "supergroup"]:
         if chat_id not in GRUPOS_AUTORIZADOS:
             print(f"⛔ Grupo no autorizado: {chat_id}")
-            return
-        if not (mencion_directa or respuesta_al_bot):
-            print(f"🤐 Ignorado: sin mención ni respuesta directa al bot en {chat_id}")
             return
 
     elif chat_type == "private":
@@ -53,14 +34,21 @@ async def recibir(update, context):
     print(f"✅ Mensaje aceptado de chat {chat_id} por usuario {user_id}")
 
     try:
-        user_msg = texto
+        query = texto.lower()
+        posibles_monedas = await crypto_mapper.extraer_tokens_mencionados(query)
+
+        if posibles_monedas:
+            # Si hay cripto detectada, llama al handler especializado
+            await handle_consulta_token(update, context)
+            return
+
+        # Si no hay cripto detectada, usa IA
         user_name = update.effective_user.first_name
         contexto = {}
-
-        respuesta = await generar_respuesta_ia(user_msg, user_name, contexto)
+        respuesta = await generar_respuesta_ia(texto, user_name, contexto)
         await update.message.reply_text(respuesta)
 
     except Exception as e:
-        print(f"❌ Error en IA: {e}")
+        print(f"❌ Error al procesar mensaje: {e}")
         traceback.print_exc()
         await update.message.reply_text("⚠️ Error al procesar tu consulta. Intenta más tarde.")
