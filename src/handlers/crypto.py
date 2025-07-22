@@ -24,17 +24,14 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await crypto_mapper.maybe_refresh_list()
         cripto_id = crypto_mapper.find_coin(user_input)
 
-        # Paso 1: buscar en caché
         datos = get_precio_desde_cache(cripto_id) if cripto_id else None
 
-        # Paso 2: CoinGecko
-        if not datos and cripto_id:
-            datos = CoinGeckoAPI.obtener_precio(cripto_id)
-
-        # Paso 3: CoinMarketCap si no está en CoinGecko
         if not datos:
             datos = CoinMarketCapAPI.obtener_precio(user_input)
 
+        if not datos and cripto_id:
+            datos = CoinGeckoAPI.obtener_precio(cripto_id)
+            
         if datos:
             emoji_trend = "📈" if datos.get('cambio_24h', 0) >= 0 else "📉"
             respuesta = (
@@ -45,7 +42,6 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(respuesta, parse_mode="Markdown")
 
-            # Análisis IA
             contexto = f"Token consultado: {user_input}\n{respuesta}"
             prompt = (
                 "Eres un analista de mercado cripto. Basado en los datos entregados, genera una breve "
