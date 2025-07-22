@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from src.services.crypto_mapper import crypto_mapper
 from src.services.coingecko import CoinGeckoAPI
+from src.services.coinmarketcap import CoinMarketCapAPI  
 from src.services.price_updater import get_precio_desde_cache
 from src.config import logger
 from src.services.price_opinion import construir_contexto_opinion, armar_prompt_opinion
@@ -24,39 +25,41 @@ async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await crypto_mapper.maybe_refresh_list()
         cripto_id = crypto_mapper.find_coin(user_input)
 
-        if not cripto_id:
+       
+        datos = get_precio_desde_cache(cripto_id) if cripto_id else None
+
+        # 2️⃣ 
+        if not datos and cripto_id:
+            datos = CoinGeckoAPI.obtener_precio(cripto_id)
+
+        # 3️⃣ 
+        if not datos:
+            datos = CoinMarketCapAPI.obtener_precio(user_input)
+
+        if not datos:
             await update.message.reply_text(
-                f"❌ No pude reconocer la criptomoneda '{user_input}'. Intenta con BTC, ETH, SOL, etc."
+                f"❌ No pude obtener el precio de '{user_input.upper()}'. Asegúrate de que sea un token válido."
             )
             return
 
-        datos = get_precio_desde_cache(cripto_id) or CoinGeckoAPI.obtener_precio(cripto_id)
-
-        if not datos:
-            raise ValueError("No se encontraron datos disponibles")
-
-        # 📊 Precio actual
         emoji_trend = "📈" if datos.get('cambio_24h', 0) >= 0 else "📉"
         respuesta = (
-            f"🔹 *{datos.get('nombre', 'Unknown')} ({datos.get('simbolo', '??').upper()})*\n"
+            f"🔹 *{datos.get('nombre', 'Unknown')} ({datos.get('symbol', '??').upper()})*\n"
             f"💵 Precio: ${datos.get('precio', 0):,.2f} USD\n"
-            f"{emoji_trend} 24h: {datos.get('cambio_24h', 0):+.2f}%\n"
-            f"🔄 Actualizado: {datos.get('ultima_actualizacion', 'N/A')}"
+            f"{emoji_trend} 24h: {datos.get('cambio_24h', 0):+.2f}%"
         )
         await update.message.reply_text(respuesta, parse_mode="Markdown")
 
+       
         contexto = construir_contexto_opinion(datos)
         prompt = armar_prompt_opinion(datos)
-
         disclaimer = (
             "\n\n⚠️ *Aviso rápido:* Este análisis es solo informativo y con un toque de humor. "
             "¡No tomes decisiones de inversión solo por lo que diga un bot! 😉"
         )
-
         respuesta_ia = await generar_respuesta_ia(prompt, update.effective_user.first_name, contexto)
         await update.message.reply_text(respuesta_ia + disclaimer, parse_mode="Markdown")
 
     except Exception as e:
         logger.error(f"Error en /precio: {e}")
         await update.message.reply_text("⚠️ Error al consultar el precio. Intenta nuevamente más tarde.")
-
