@@ -1,89 +1,46 @@
-from flask import Flask, request
-from telegram import Update, BotCommand
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    filters,
-    CallbackQueryHandler,
-    ContextTypes
-)
-import os
-import threading
-import logging
-
-from src.config import (
-    TELEGRAM_TOKEN as TOKEN,
-    logger,
-    BotMeta
-)
-from src.handlers.base import setup_base_handlers
-from src.handlers.crypto import precio_cripto
-from src.handlers.post import PostHandler
-from src.handlers.resume import ResumeHandler
-from src.services.price_updater import iniciar_actualizador
 from src.handlers.token_query import handle_consulta_token
-from src.handlers.solo_topic import recibir  # Aquí va tu función de control
+from src.services.openai import generar_respuesta_ia
+import os
+import traceback
 
-app = Flask(__name__)
-post_handler = PostHandler()
-resume_handler = ResumeHandler()
+# Leer los chat_id autorizados desde variable de entorno
+ids = os.getenv("TELEGRAM_CHANNEL_ID", "")
+GRUPOS_AUTORIZADOS = [int(x.strip()) for x in ids.split(",") if x.strip()]
 
-application = Application.builder().token(TOKEN).build()
+# Leer los admin_id para uso en chat privado
+admin_ids = os.getenv("TELEGRAM_ADMIN_IDS", "")
+USUARIOS_ADMIN = [int(x.strip()) for x in admin_ids.split(",") if x.strip()]
 
-GRUPOS_PERMITIDOS = [-1002615396578, -10023048706229]
+async def recibir(update, context):
+    if update.message is None:
+        return
 
-async def set_commands():
-    commands = [
-        BotCommand("start", "Inicia el bot"),
-        BotCommand("help", "Muestra ayuda"),
-        BotCommand("precio", "Consulta precio de cripto"),
-        BotCommand("post", "Crea un post para el canal"),
-        BotCommand("resumen_texto", "Resume un texto en español"),
-        BotCommand("resumen_url", "Resume una página web en español")
-    ]
-    await application.bot.set_my_commands(commands)
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+    chat_type = update.effective_chat.type
+    texto = update.message.text or ""
 
-def setup_handlers():
-    setup_base_handlers(application)
+    if chat_type in ["group", "supergroup"]:
+        if chat_id not in GRUPOS_AUTORIZADOS:
+            print(f"⛔ Grupo no autorizado: {chat_id}")
+            return
 
-    application.add_handler(CommandHandler("precio", precio_cripto))
-    application.add_handler(CommandHandler("post", post_handler.handle))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
-    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+    elif chat_type == "private":
+        if user_id not in USUARIOS_ADMIN:
+            print(f"⛔ Usuario no autorizado en privado: {user_id}")
+            return
 
-    # ✅ Mensajes generales SOLO en grupos permitidos
-    application.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.Chat(chat_id=GRUPOS_PERMITIDOS),
-            recibir
-        )
-    )
+    print(f"✅ Mensaje aceptado de chat {chat_id} por usuario {user_id}")
 
-@app.route('/webhook', methods=['POST'])
-async def webhook():
     try:
-        update = Update.de_json(request.json, application.bot)
-        await application.update_queue.put(update)
-        logger.info(f"[{BotMeta.NAME}] Update procesado")
-        return "OK", 200
+        user_msg = texto
+        user_name = update.effective_user.first_name
+        contexto = {}
+
+        respuesta = await generar_respuesta_ia(user_msg, user_name, contexto)
+        await update.message.reply_text(respuesta)
+
     except Exception as e:
-        logger.error(f"Error en webhook: {e}")
-        return "Error", 500
-
-@app.route('/')
-def health_check():
-    return f"{BotMeta.NAME} está activo ✅", 200
-
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
-
-if __name__ == '__main__':
-    setup_handlers()
-    iniciar_actualizador()
-
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-
-    application.run_polling()
+        print(f"❌ Error en IA: {e}")
+        traceback.print_exc()
+        await update.message.reply_text("⚠️ Error al procesar tu consulta. Intenta más tarde.")
