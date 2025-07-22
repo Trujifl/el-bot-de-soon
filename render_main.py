@@ -21,7 +21,7 @@ from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.services.price_updater import iniciar_actualizador
-from src.handlers.token_query_handler import handle_consulta_token
+from src.handlers.token_query import handle_consulta_token
 import threading
 
 app = Flask(__name__)
