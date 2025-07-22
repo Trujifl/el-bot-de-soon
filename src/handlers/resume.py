@@ -7,7 +7,6 @@ from typing import Literal
 from urllib.parse import urlparse
 
 class ResumeHandler:
-    # ==================== MÉTODOS PRINCIPALES ====================
     async def handle_resumen_texto(self, update: Update, context: CallbackContext) -> None:
         original_text = update.message.text.replace('/resumen_texto', '').strip()
         
@@ -53,7 +52,6 @@ class ResumeHandler:
         except Exception as e:
             await update.message.reply_text(f"❌ Error al procesar URL: {str(e)}")
 
-    # ==================== FUNCIONES COMPARTIDAS ====================
     def _classify_content(self, text: str) -> Literal['blockchain', 'finanzas', 'tecnología', 'general']:
         crypto_terms = ['blockchain', 'token', 'nft', 'web3', 'defi', 'staking', 'smart contract', 'wallet']
         finance_terms = ['inversión', 'mercado', 'acciones', 'dividendos', 'bolsa', 'financiero', 'trading']
@@ -69,7 +67,6 @@ class ResumeHandler:
             return 'tecnología'
         return 'general'
 
-    # ==================== LÓGICA PARA TEXTO ====================
     def _generate_text_summary(self, text: str, content_type: str) -> str:
         if content_type == 'blockchain':
             return self._crypto_summary(text)
@@ -111,7 +108,6 @@ class ResumeHandler:
         key_sentences = re.findall(r'([A-Z][^.!?]*[.!?])', text)[:5]
         return "📌 Puntos clave:\n\n" + "\n".join(f"• {sentence.strip()}" for sentence in key_sentences)
 
-    # ==================== LÓGICA PARA URLs ====================
     async def _fetch_web_content(self, url: str) -> tuple:
         headers = {
             'User-Agent': 'Mozilla/5.0',
@@ -177,7 +173,6 @@ class ResumeHandler:
         key_points = re.findall(r'([A-Z][^.!?]*[.!?])', text)[:5]
         return f"📌 {title}\n\n" + "🔹 " + "\n🔹 ".join(key_points[:5])
 
-    # ==================== FUNCIONES AUXILIARES ====================
     def _extract_project_name(self, text: str) -> str:
         matches = re.findall(r'\b([A-Z][a-zA-Z0-9]+)\b', text)
         return matches[0] if matches else "Proyecto"
