@@ -7,7 +7,12 @@ class CoinMarketCapAPI:
 
     @staticmethod
     def obtener_precio(nombre_token: str) -> dict | None:
+        """
+        Consulta el precio y variación de un token desde CoinMarketCap.
+        Devuelve un diccionario con: nombre, símbolo, precio y cambio 24h.
+        """
         if not CoinMarketCapAPI.API_KEY:
+            print("❌ No se encontró la API KEY de CoinMarketCap.")
             return None
 
         headers = {
@@ -16,7 +21,7 @@ class CoinMarketCapAPI:
         }
 
         params = {
-            "symbol": nombre_token.upper(),
+            "symbol": nombre_token.upper(), 
             "convert": "USD"
         }
 
@@ -25,15 +30,20 @@ class CoinMarketCapAPI:
             response.raise_for_status()
             data = response.json()
 
-            if "data" in data and nombre_token.upper() in data["data"]:
-                info = data["data"][nombre_token.upper()]
+            symbol = nombre_token.upper()
+            if "data" in data and symbol in data["data"]:
+                info = data["data"][symbol]
+                quote = info["quote"]["USD"]
                 return {
                     "nombre": info["name"],
-                    "symbol": info["symbol"],
-                    "precio": info["quote"]["USD"]["price"],
-                    "cambio_24h": info["quote"]["USD"]["percent_change_24h"],
+                    "symbol": symbol,
+                    "precio": round(quote["price"], 2),
+                    "cambio_24h": round(quote["percent_change_24h"], 2)
                 }
-        except Exception as e:
+
+        except requests.exceptions.RequestException as e:
             print(f"❌ Error al consultar CoinMarketCap: {e}")
+        except Exception as e:
+            print(f"❌ Error inesperado: {e}")
 
         return None
