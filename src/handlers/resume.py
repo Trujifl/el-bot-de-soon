@@ -66,7 +66,36 @@ class ResumeHandler:
 
     def _build_prompt(self, texto: str, tipo: str) -> str:
         introduccion = (
-            "Eres un analista profesional. Tu tarea es generar un resumen detallado y estructurado "
-            "en español del siguiente contenido. El resumen debe estar organizado por secciones claras "
+            "Eres un analista profesional. Tu tarea es generar un resumen detallado, traducido al español, "
+            "y estructurado del siguiente contenido. El resumen debe estar organizado por secciones claras "
             "según el tipo de tema detectado."
         )
+
+        secciones = {
+            'blockchain': "🔹 Proyecto\n💰 Tokenomics\n🔄 Mecánicas\n📅 Roadmap\n🎯 Beneficios",
+            'finanzas': "📈 Concepto\n💵 Montos\n📊 Riesgos\n🔄 Tendencia",
+            'tecnología': "🤖 Tecnología\n🚀 Innovación\n🛠️ Funciones\n📱 Aplicación",
+            'general': "📌 Puntos clave"
+        }
+
+        return (
+            f"{introduccion}\n\n"
+            f"Tipo de contenido: {tipo.capitalize()}\n"
+            f"Formato esperado:\n{secciones.get(tipo, secciones['general'])}\n\n"
+            f"Contenido a resumir:\n{texto}"
+        )
+
+    def _get_domain(self, url: str) -> str:
+        domain = urlparse(url).netloc
+        clean_domain = domain.replace("www.", "").split(".")[0]
+        return clean_domain.capitalize()
+
+    def _fetch_url_content(self, url: str) -> tuple:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        title = soup.title.string.strip() if soup.title else "Contenido"
+        text_elements = soup.find_all(["p", "li"])
+        content = "\n".join([el.get_text(strip=True) for el in text_elements if el.get_text(strip=True)])
+        return title, content
