@@ -1,13 +1,12 @@
 from src.handlers.token_query import handle_consulta_token
 from src.services.openai import generar_respuesta_ia
+from src.services.crypto_mapper import crypto_mapper
 import os
 import traceback
 
-# Leer los chat_id autorizados desde variable de entorno
 ids = os.getenv("TELEGRAM_CHANNEL_ID", "")
 GRUPOS_AUTORIZADOS = [int(x.strip()) for x in ids.split(",") if x.strip()]
 
-# Leer los admin_id para uso en chat privado
 admin_ids = os.getenv("TELEGRAM_ADMIN_IDS", "")
 USUARIOS_ADMIN = [int(x.strip()) for x in admin_ids.split(",") if x.strip()]
 
@@ -33,14 +32,14 @@ async def recibir(update, context):
     print(f"✅ Mensaje aceptado de chat {chat_id} por usuario {user_id}")
 
     try:
-        user_msg = texto
+        query = texto.lower()
+        posibles_monedas = await crypto_mapper.extraer_tokens_mencionados(query)
+
+        if posibles_monedas:
+            # Si hay cripto detectada, llama al handler especializado
+            await handle_consulta_token(update, context)
+            return
+
+        # Si no hay cripto detectada, usa IA
         user_name = update.effective_user.first_name
         contexto = {}
-
-        respuesta = await generar_respuesta_ia(user_msg, user_name, contexto)
-        await update.message.reply_text(respuesta)
-
-    except Exception as e:
-        print(f"❌ Error en IA: {e}")
-        traceback.print_exc()
-        await update.message.reply_text("⚠️ Error al procesar tu consulta. Intenta más tarde.")
