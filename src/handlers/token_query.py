@@ -5,13 +5,13 @@ from src.services.coingecko import CoinGeckoAPI
 from src.services.coinmarketcap import CoinMarketCapAPI
 from src.services.openai import generar_respuesta_ia
 from src.services.crypto_mapper import crypto_mapper
-import traceback
+from src.config import logger
 
 async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         query = update.message.text.lower()
 
-        posibles_monedas = await crypto_mapper.extraer_tokens_mencionados(query)
+        posibles_monedas = crypto_mapper.extraer_tokens_mencionados(query)  # <- sync como antes
         if not posibles_monedas:
             await update.message.reply_text("❌ No identifiqué una criptomoneda en tu mensaje.")
             return
@@ -61,6 +61,5 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text(fallback, parse_mode="Markdown")
 
     except Exception as e:
-        print(f"❌ Error en token_query: {e}")
-        traceback.print_exc()
+        logger.error(f"❌ Error en token_query: {e}")
         await update.message.reply_text("⚠️ Error al procesar tu consulta. Intenta más tarde.")
