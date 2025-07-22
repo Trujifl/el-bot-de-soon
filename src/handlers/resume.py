@@ -7,8 +7,8 @@ from typing import Literal
 from urllib.parse import urlparse
 
 class ResumeHandler:
-    # ==================== MÉTODOS PRINCIPALES ====================
-   async def handle_resumen_texto(self, update: Update, context: CallbackContext) -> None:
+   
+    async def handle_resumen_texto(self, update: Update, context: CallbackContext) -> None:
     original_text = update.message.text.replace('/resumen_texto', '').strip()
     
     if not original_text:
