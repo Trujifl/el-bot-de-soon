@@ -23,10 +23,12 @@ async def recibir(update, context):
     bot_username = me.username.lower()
 
     # 🧠 Revisar mención explícita o respuesta directa
+    texto_original = texto or ""
     mencion_directa = any(
-        ent.type == "mention" and ent.text.lower() == f"@{bot_username}"
+        ent.type == "mention" and texto_original[ent.offset:ent.offset + ent.length].lower() == f"@{bot_username}"
         for ent in update.message.entities or []
     )
+
     respuesta_al_bot = (
         update.message.reply_to_message
         and update.message.reply_to_message.from_user
