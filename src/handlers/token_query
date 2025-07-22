@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from src.services.price_updater import get_precio_desde_cache
 from src.services.coingecko import CoinGeckoAPI
-from src.services.coinmarketcap import CoinMarketCapAPI  # Debes crear este módulo
+from src.services.coinmarketcap import CoinMarketCapAPI 
 from src.services.openai import generar_respuesta_ia
 from src.services.crypto_mapper import crypto_mapper
 
