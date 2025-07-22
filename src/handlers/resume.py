@@ -5,11 +5,12 @@ from telegram import Update
 from telegram.ext import CallbackContext
 from typing import Literal
 from urllib.parse import urlparse
+from src.services.openai import generar_respuesta_ia
 
 class ResumeHandler:
     async def handle_resumen_texto(self, update: Update, context: CallbackContext) -> None:
         original_text = update.message.text.replace('/resumen_texto', '').strip()
-        
+
         if not original_text:
             await update.message.reply_text(
                 "📝 *Instrucciones para /resumen_texto:*\n\n"
@@ -21,6 +22,7 @@ class ResumeHandler:
             return
 
         try:
+            original_text = await self._traducir_a_espanol(original_text)
             content_type = self._classify_content(original_text)
             summary = self._generate_text_summary(original_text, content_type)
             await update.message.reply_text(summary, parse_mode="Markdown")
@@ -42,6 +44,7 @@ class ResumeHandler:
 
         try:
             title, clean_text = await self._fetch_web_content(url)
+            clean_text = await self._traducir_a_espanol(clean_text)
             content_type = self._classify_content(clean_text)
             summary = self._generate_url_summary(title, clean_text, content_type)
             await update.message.reply_text(
@@ -52,13 +55,20 @@ class ResumeHandler:
         except Exception as e:
             await update.message.reply_text(f"❌ Error al procesar URL: {str(e)}")
 
+    async def _traducir_a_espanol(self, texto: str) -> str:
+        prompt = (
+            "Traduce el siguiente contenido al español de forma natural y precisa:\n\n"
+            f"{texto.strip()}"
+        )
+        respuesta = await generar_respuesta_ia(prompt)
+        return respuesta.strip()
+
     def _classify_content(self, text: str) -> Literal['blockchain', 'finanzas', 'tecnología', 'general']:
         crypto_terms = ['blockchain', 'token', 'nft', 'web3', 'defi', 'staking', 'smart contract', 'wallet']
         finance_terms = ['inversión', 'mercado', 'acciones', 'dividendos', 'bolsa', 'financiero', 'trading']
         tech_terms = ['IA', 'machine learning', 'cloud', 'software', 'hardware', 'algoritmo']
 
         text_lower = text.lower()
-        
         if any(term in text_lower for term in crypto_terms):
             return 'blockchain'
         elif any(term in text_lower for term in finance_terms):
@@ -82,7 +92,7 @@ class ResumeHandler:
             '💰 Tokenomics': self._extract_pattern(r'\$[\d,]+|[\d,]+% APY|\d+ tokens?', text),
             '🛠️ Mecánicas': self._extract_pattern(r'staking|minteo|gobernanza|NFT|DAO|DeFi|smart contract', text),
             '📅 Roadmap': self._extract_pattern(r'Temporada \d+|Q\d+ \d{4}|\d{4}-\d{2}', text),
-            '🎯 Beneficios': self._extract_pattern(r'recompensas?|beneficios|ventajas|airdrops?|rewards', text)
+            '🌟 Beneficios': self._extract_pattern(r'recompensas?|beneficios|ventajas|airdrops?|rewards', text)
         }
         return self._format_components(components)
 
@@ -113,23 +123,13 @@ class ResumeHandler:
             'User-Agent': 'Mozilla/5.0',
             'Accept-Language': 'es-ES,es;q=0.9'
         }
-        
         response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        
         soup = BeautifulSoup(response.text, 'html.parser')
         for element in soup(['script', 'style', 'footer', 'nav', 'iframe', 'img']):
             element.decompose()
-        
         title = soup.title.string if soup.title else "Contenido Web"
-        content_blocks = []
-        for tag in ['h1', 'h2', 'h3', 'p']:
-            elements = soup.find_all(tag)
-            for el in elements:
-                text = el.get_text().strip()
-                if len(text.split()) > 5:
-                    content_blocks.append(text)
-        
+        content_blocks = [el.get_text().strip() for tag in ['h1', 'h2', 'h3', 'p'] for el in soup.find_all(tag) if len(el.get_text().split()) > 5]
         return title, "\n".join(content_blocks[:15])
 
     def _generate_url_summary(self, title: str, text: str, content_type: str) -> str:
@@ -154,7 +154,7 @@ class ResumeHandler:
     def _finance_url_summary(self, title: str, text: str) -> str:
         components = {
             '📌 Título': title,
-            '📊 Mercado': self._extract_pattern(r'mercado \w+|índice \w+|sector \w+', text),
+            '📊 Mercado': self._extract_pattern(r'mercado \w+|\u00edndice \w+|sector \w+', text),
             '📈 Análisis': self._extract_pattern(r'tendencia alcista|presión bajista|soporte en', text),
             '💡 Recomendación': self._extract_pattern(r'invertir en|evitar \w+|mantener posición', text)
         }
@@ -183,18 +183,10 @@ class ResumeHandler:
         return "\n".join(f"- {m}" for m in unique_matches) if unique_matches else "No especificado"
 
     def _format_components(self, components: dict) -> str:
-        return "\n".join(
-            f"{key}: {value}" 
-            for key, value in components.items() 
-            if value != "No especificado"
-        ) + "\n\n🔍 Resumen generado automáticamente"
+        return "\n".join(f"{key}: {value}" for key, value in components.items() if value != "No especificado") + "\n\n🔍 Resumen generado automáticamente"
 
     def _format_url_components(self, components: dict) -> str:
-        return "\n".join(
-            f"{key}: {value}" 
-            for key, value in components.items() 
-            if value and value != "No especificado"
-        ) + "\n\n📌 Resumen automático"
+        return "\n".join(f"{key}: {value}" for key, value in components.items() if value and value != "No especificado") + "\n\n🔍 Resumen automático"
 
     def _get_domain(self, url: str) -> str:
         domain = urlparse(url).netloc
