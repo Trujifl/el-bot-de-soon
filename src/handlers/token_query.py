@@ -26,12 +26,16 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
             datos = CoinMarketCapAPI.obtener_precio(token)
 
         if datos:
-            emoji_trend = "📈" if datos.get('cambio_24h', 0) >= 0 else "📉"
+            nombre = datos.get('nombre', token.capitalize())
+            simbolo = datos.get('symbol') or datos.get('simbolo') or token.upper()
+            precio = datos.get('precio', 0)
+            cambio = datos.get('cambio_24h', 0)
+            tendencia = "📈" if cambio >= 0 else "📉"
+
             texto = (
-                f"🔹 *{datos.get('nombre', 'Unknown')} ({datos.get('simbolo', '??').upper()})*\n"
-                f"💵 Price: ${datos.get('precio', 0):,.2f} USD\n"
-                f"{emoji_trend} 24h: {datos.get('cambio_24h', 0):+.2f}%\n"
-                f"🕒 Updated: {datos.get('ultima_actualizacion', 'N/A')}"
+                f"🔹 *{nombre} ({simbolo})*\n"
+                f"💵 Precio: ${precio:,.2f} USD\n"
+                f"{tendencia} 24h: {cambio:+.2f}%"
             )
             await update.message.reply_text(texto, parse_mode="Markdown")
 
