@@ -72,4 +72,3 @@ def setup_base_handlers(application):
     """Configura los handlers básicos del bot"""
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
