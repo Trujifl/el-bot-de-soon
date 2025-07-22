@@ -1,4 +1,5 @@
 from src.handlers.token_query import handle_consulta_token
+from src.services.openai import generar_respuesta_ia
 import os
 
 # Leer los chat_id autorizados desde variable de entorno
@@ -49,4 +50,21 @@ async def recibir(update, context):
             return
 
     print(f"✅ Mensaje aceptado de chat {chat_id} por usuario {user_id}")
-    await handle_consulta_token(update, context)
+
+    try:
+        await handle_consulta_token(update, context)
+    except Exception as e:
+        # Si falló la consulta de token, intentamos responder con IA como fallback
+        try:
+            texto_usuario = update.message.text
+            nombre_usuario = update.effective_user.first_name
+            respuesta = await generar_respuesta_ia(
+                texto_usuario,
+                nombre_usuario,
+                contexto="Mensaje sin criptomonedas reconocidas o error de parsing"
+            )
+            await update.message.reply_text(respuesta)
+        except Exception as fallback_error:
+            from src.config import logger
+            logger.exception("❌ Error tanto en handle_consulta_token como en fallback IA:")
+            await update.message.reply_text("⚠️ Error al procesar tu consulta. Intenta más tarde.")
