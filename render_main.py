@@ -21,6 +21,7 @@ from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.services.price_updater import iniciar_actualizador
+import threading
 
 app = Flask(__name__)
 post_handler = PostHandler()
@@ -62,8 +63,16 @@ async def webhook():
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
+
 if __name__ == '__main__':
     setup_handlers()
     iniciar_actualizador()
-    application.run_polling()  
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
+
+    # Lanzamos Flask en un hilo aparte para no bloquear el bot
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
+    # Ejecutamos el bot normalmente
+    application.run_polling()
