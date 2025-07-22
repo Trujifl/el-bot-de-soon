@@ -1,45 +1,66 @@
-from src.handlers.token_query import handle_consulta_token
+from telegram import Update
+from telegram.ext import ContextTypes
+from src.services.price_updater import get_precio_desde_cache
+from src.services.coingecko import CoinGeckoAPI
+from src.services.coinmarketcap import CoinMarketCapAPI
 from src.services.openai import generar_respuesta_ia
 from src.services.crypto_mapper import crypto_mapper
-import os
 import traceback
 
-ids = os.getenv("TELEGRAM_CHANNEL_ID", "")
-GRUPOS_AUTORIZADOS = [int(x.strip()) for x in ids.split(",") if x.strip()]
-
-admin_ids = os.getenv("TELEGRAM_ADMIN_IDS", "")
-USUARIOS_ADMIN = [int(x.strip()) for x in admin_ids.split(",") if x.strip()]
-
-async def recibir(update, context):
-    if update.message is None:
-        return
-
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-    chat_type = update.effective_chat.type
-    texto = update.message.text or ""
-
-    if chat_type in ["group", "supergroup"]:
-        if chat_id not in GRUPOS_AUTORIZADOS:
-            print(f"⛔ Grupo no autorizado: {chat_id}")
-            return
-
-    elif chat_type == "private":
-        if user_id not in USUARIOS_ADMIN:
-            print(f"⛔ Usuario no autorizado en privado: {user_id}")
-            return
-
-    print(f"✅ Mensaje aceptado de chat {chat_id} por usuario {user_id}")
-
+async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        query = texto.lower()
-        posibles_monedas = await crypto_mapper.extraer_tokens_mencionados(query)
+        query = update.message.text.lower()
 
-        if posibles_monedas:
-            # Si hay cripto detectada, llama al handler especializado
-            await handle_consulta_token(update, context)
+        posibles_monedas = await crypto_mapper.extraer_tokens_mencionados(query)
+        if not posibles_monedas:
+            await update.message.reply_text("❌ No identifiqué una criptomoneda en tu mensaje.")
             return
 
-        # Si no hay cripto detectada, usa IA
-        user_name = update.effective_user.first_name
-        contexto = {}
+        token = posibles_monedas[0]
+        cripto_id = crypto_mapper.find_coin(token)
+
+        datos = get_precio_desde_cache(cripto_id) if cripto_id else None
+        if not datos and cripto_id:
+            datos = CoinGeckoAPI.obtener_precio(cripto_id)
+
+        if not datos:
+            datos = CoinMarketCapAPI.obtener_precio(token)
+
+        if datos:
+            nombre = datos.get('nombre', token.capitalize())
+            simbolo = datos.get('symbol') or datos.get('simbolo') or token.upper()
+            precio = datos.get('precio', 0)
+            cambio = datos.get('cambio_24h', 0)
+            tendencia = "📈" if cambio >= 0 else "📉"
+
+            texto = (
+                f"🔹 *{nombre} ({simbolo})*\n"
+                f"💵 Precio: ${precio:,.2f} USD\n"
+                f"{tendencia} 24h: {cambio:+.2f}%"
+            )
+            await update.message.reply_text(texto, parse_mode="Markdown")
+
+            contexto = f"Token consultado: {token}\n{texto}"
+            prompt = (
+                "Eres un analista de mercado cripto. Basado en los datos entregados, genera una breve "
+                "explicación en español sobre la situación actual del token consultado, con un estilo claro y profesional."
+            )
+            opinion = await generar_respuesta_ia(prompt, update.effective_user.first_name, contexto)
+
+            disclaimer = (
+                "\n\n⚠️ *Disclaimer:* Este contenido es informativo. No representa consejo financiero. Haz tu propia investigación. 😉"
+            )
+            await update.message.reply_text(opinion + disclaimer, parse_mode="Markdown")
+        else:
+            prompt = (
+                f"Eres un experto en criptomonedas. Un usuario preguntó sobre '{query}'. "
+                "No se encontraron datos directos, así que responde con un resumen informativo general "
+                "en español sobre el activo mencionado, su posible uso, origen o aplicación."
+            )
+            fallback = await generar_respuesta_ia(prompt, update.effective_user.first_name, query)
+            await update.message.reply_text(fallback, parse_mode="Markdown")
+
+    except Exception as e:
+        print(f"❌ Error en token_query: {e}")
+        traceback.print_exc()
+        await update.message.reply_text("⚠️ Error al procesar tu consulta. Intenta más tarde.")
