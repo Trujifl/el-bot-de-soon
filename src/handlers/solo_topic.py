@@ -23,18 +23,18 @@ async def recibir(update, context):
             print(f"⛔ Grupo no autorizado: {chat_id}")
             return
 
-        
+        # 🔒 Requiere mención al bot o respuesta al bot
         bot_username = (await context.bot.get_me()).username
-mencion_directa = f"@{bot_username}".lower() in texto.lower()
-respuesta_al_bot = (
-    update.message.reply_to_message
-    and update.message.reply_to_message.from_user
-    and update.message.reply_to_message.from_user.is_bot
-)
+        mencion_directa = f"@{bot_username}".lower() in texto.lower()
+        respuesta_al_bot = (
+            update.message.reply_to_message
+            and update.message.reply_to_message.from_user
+            and update.message.reply_to_message.from_user.is_bot
+        )
 
-if not mencion_directa:
-    print(f"🤐 Ignorado: sin mención explícita en chat {chat_id}")
-    return
+        if not (mencion_directa or respuesta_al_bot):
+            print(f"🤐 Ignorado: sin mención ni respuesta al bot en chat {chat_id}")
+            return
 
     elif chat_type == "private":
         if user_id not in USUARIOS_ADMIN:
