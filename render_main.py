@@ -1,16 +1,15 @@
 from flask import Flask, request
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    filters,
     CallbackQueryHandler,
-    ContextTypes
+    ContextTypes,
+    filters
 )
-from telegram import BotCommand
 import os
-import logging
+import threading
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
     logger,
@@ -20,10 +19,9 @@ from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
-from src.services.price_updater import iniciar_actualizador
 from src.handlers.token_query import handle_consulta_token
-import threading
-from src.handlers.solo_topic import recibir
+from src.handlers.solo_topic import recibir  
+from src.services.price_updater import iniciar_actualizador
 
 app = Flask(__name__)
 post_handler = PostHandler()
@@ -49,6 +47,7 @@ def setup_handlers():
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, recibir))
 
 @app.route('/webhook', methods=['POST'])
