@@ -1,6 +1,8 @@
 from telegram import Update
 from telegram.ext import CallbackContext
 from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+import requests
 from src.services.openai import generar_respuesta_ia
 
 class ResumeHandler:
@@ -39,8 +41,7 @@ class ResumeHandler:
             return
 
         try:
-            from src.services.url_fetcher import fetch_url_content  # asegúrate que exista este servicio
-            title, content = await fetch_url_content(url)
+            title, content = self._fetch_url_content(url)
             content_type = self._classify_content(content)
             prompt = self._build_prompt(content, content_type)
             summary = await generar_respuesta_ia(prompt, update.effective_user.first_name, content)
@@ -69,22 +70,3 @@ class ResumeHandler:
             "en español del siguiente contenido. El resumen debe estar organizado por secciones claras "
             "según el tipo de tema detectado."
         )
-
-        secciones = {
-            'blockchain': "🔹 Proyecto\n💰 Tokenomics\n🔄 Mecánicas\n📅 Roadmap\n🎯 Beneficios",
-            'finanzas': "📈 Concepto\n💵 Montos\n📊 Riesgos\n🔄 Tendencia",
-            'tecnología': "🤖 Tecnología\n🚀 Innovación\n🛠️ Funciones\n📱 Aplicación",
-            'general': "📌 Puntos clave"
-        }
-
-        return (
-            f"{introduccion}\n\n"
-            f"Tipo de contenido: {tipo.capitalize()}\n"
-            f"Formato esperado:\n{secciones.get(tipo, secciones['general'])}\n\n"
-            f"Texto:\n{texto}"
-        )
-
-    def _get_domain(self, url: str) -> str:
-        domain = urlparse(url).netloc
-        clean_domain = domain.replace("www.", "").split(".")[0]
-        return clean_domain.capitalize()
