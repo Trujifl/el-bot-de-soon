@@ -70,9 +70,7 @@ if __name__ == '__main__':
     setup_handlers()
     iniciar_actualizador()
 
-    # Lanzamos Flask en un hilo aparte para no bloquear el bot
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
 
-    # Ejecutamos el bot normalmente
     application.run_polling()
