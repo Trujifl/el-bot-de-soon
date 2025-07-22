@@ -10,13 +10,12 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         query = update.message.text.lower()
 
-        # Detectar si el mensaje es una consulta sobre mercado
         posibles_monedas = await crypto_mapper.extraer_tokens_mencionados(query)
         if not posibles_monedas:
             await update.message.reply_text("❌ No identifiqué una criptomoneda en tu mensaje.")
             return
 
-        token = posibles_monedas[0]  # Tomamos el primero reconocido
+        token = posibles_monedas[0]  
         cripto_id = crypto_mapper.find_coin(token)
 
         datos = get_precio_desde_cache(cripto_id) if cripto_id else None
@@ -24,7 +23,6 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
             datos = CoinGeckoAPI.obtener_precio(cripto_id)
 
         if not datos:
-            # Último intento: CoinMarketCap
             datos = CoinMarketCapAPI.obtener_precio(token)
 
         if datos:
@@ -49,7 +47,6 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
             )
             await update.message.reply_text(opinion + disclaimer, parse_mode="Markdown")
         else:
-            # Último recurso: IA da un resumen general
             prompt = (
                 f"Eres un experto en criptomonedas. Un usuario preguntó sobre '{query}'. "
                 "No se encontraron datos directos, así que responde con un resumen informativo general "
