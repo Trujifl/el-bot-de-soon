@@ -18,9 +18,9 @@ from src.config import (
 )
 from src.handlers.base import setup_base_handlers, handle_message
 from src.handlers.crypto import precio_cripto
-from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.handlers.token_query import handle_consulta_token
+from src.handlers.post import PostHandler
 from src.services.price_updater import iniciar_actualizador
 
 app = Flask(__name__)
@@ -31,6 +31,7 @@ application = Application.builder().token(TOKEN).build()
 
 GROUP_ID = -1002348706229
 TOPIC_ID = 8183
+POST_CHANNEL_ID = -1002615396578
 
 async def set_commands():
     commands = [
@@ -55,6 +56,8 @@ class TopicFilter(filters.BaseFilter):
 def setup_handlers():
     setup_base_handlers(application)
 
+    post_handler.CHANNEL_ID = POST_CHANNEL_ID
+
     application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
     application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
@@ -63,14 +66,16 @@ def setup_handlers():
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
+
+    application.add_handler(MessageHandler(filters.ALL, lambda u, c: None))
+
     try:
         asyncio.get_event_loop().create_task(set_commands())
     except RuntimeError:
-        # En caso de que no haya un loop activo aún (poco común en Flask), lo creamos
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.create_task(set_commands())
-        
+
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
@@ -96,4 +101,8 @@ if __name__ == '__main__':
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.start()
 
-    application.run_polling()
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.getenv("PORT", 8080)),
+        webhook_url=os.getenv("WEBHOOK_URL")
+    )
