@@ -28,6 +28,7 @@ resume_handler = ResumeHandler()
 
 application = Application.builder().token(TOKEN).build()
 
+# 👉 IDs específicos para restringir mensajes
 GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 
@@ -42,6 +43,14 @@ async def set_commands():
     ]
     await application.bot.set_my_commands(commands)
 
+class TopicFilter(filters.BaseFilter):
+    def filter(self, message):
+        return (
+            message.chat.id == GROUP_ID
+            and message.is_topic_message
+            and message.message_thread_id == TOPIC_ID
+        )
+
 def setup_handlers():
     setup_base_handlers(application)
     application.add_handler(CommandHandler("precio", precio_cripto))
@@ -49,17 +58,7 @@ def setup_handlers():
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
-
-    def es_en_topic(update: Update):
-        return (
-            update.message
-            and update.message.chat.id == GROUP_ID
-            and update.message.is_topic_message
-            and update.message.message_thread_id == TOPIC_ID
-        )
-
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.UpdateType.MESSAGE, handle_consulta_token), group=0)
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_consulta_token), block=False, filter_predicate=es_en_topic)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
 
 @app.route('/webhook', methods=['POST'])
 async def webhook():
