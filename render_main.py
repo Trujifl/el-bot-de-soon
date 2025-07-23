@@ -1,5 +1,6 @@
+import asyncio
 from flask import Flask, request
-from telegram import Update, BotCommand
+from telegram import Update, BotCommand, BotCommandScope
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -41,6 +42,7 @@ async def set_commands():
         BotCommand("resumen_url", "Resume una página web en español")
     ]
     await application.bot.set_my_commands(commands)
+    await application.bot.set_my_commands(commands, scope=BotCommandScope(chat_id=GROUP_ID))
 
 class TopicFilter(filters.BaseFilter):
     def filter(self, message):
@@ -61,7 +63,14 @@ def setup_handlers():
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
-
+    try:
+        asyncio.get_event_loop().create_task(set_commands())
+    except RuntimeError:
+        # En caso de que no haya un loop activo aún (poco común en Flask), lo creamos
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.create_task(set_commands())
+        
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
