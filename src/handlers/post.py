@@ -1,80 +1,102 @@
+import asyncio
+from flask import Flask, request
+from telegram import Update, BotCommand, BotCommandScope
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext
-from dotenv import load_dotenv
+import threading
+from src.config import (
+    TELEGRAM_TOKEN as TOKEN,
+    logger,
+    BotMeta
+)
+from src.handlers.base import setup_base_handlers, handle_message
+from src.handlers.crypto import precio_cripto
+from src.handlers.post import PostHandler
+from src.handlers.resume import ResumeHandler
+from src.handlers.token_query import handle_consulta_token
+from src.services.price_updater import iniciar_actualizador
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+app = Flask(__name__)
+post_handler = PostHandler()
+resume_handler = ResumeHandler()
 
-class PostHandler:
-    def __init__(self):
-        self.pending_posts = {}
-        self.CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
-        self.ADMIN_IDS = [int(id.strip()) for id in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",") if id.strip()]
-        
-        print(f"Canal: {self.CHANNEL_ID} | Admins: {self.ADMIN_IDS}")
+application = Application.builder().token(TOKEN).build()
 
-    async def handle(self, update: Update, context: CallbackContext) -> None:
-        if len(update.message.text.split()) == 1:  # Solo escribió /post
-            await update.message.reply_text(
-                "📢 *Instrucciones para /post:*\n\n"
-                "Envía el comando seguido del contenido de tu publicación:\n"
-                "Formato recomendado:\n"
-                "`/post Título de tu publicación\n"
-                "Contenido detallado aquí...\n"
-                "#hashtags #opcionales`\n\n"
-                "Ejemplo completo:\n"
-                "`/post Análisis de mercado\n"
-                "Bitcoin muestra tendencia alcista...\n"
-                "#BTC #Cripto`",
-                parse_mode="Markdown"
-            )
-            return
-        
-        user_id = update.effective_user.id
-        if user_id not in self.ADMIN_IDS:
-            await update.message.reply_text("❌ Solo administradores pueden publicar")
-            return
-        
-        post_text = update.message.text.replace('/post', '', 1).strip()
-        self.pending_posts[user_id] = {"text": post_text}
-        
-        keyboard = [
-            [InlineKeyboardButton("✅ Publicar", callback_data=f"confirm_post_{user_id}"),
-             InlineKeyboardButton("❌ Cancelar", callback_data=f"cancel_post_{user_id}")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "✍️ Vista previa del post:\n\n"
-            f"{post_text}\n\n"
-            "¿Quieres publicarlo en el canal?",
-            reply_markup=reply_markup
+GROUP_ID = -1002348706229
+TOPIC_ID = 8183
+POST_CHANNEL_ID = -1002615396578  
+
+async def set_commands():
+    commands = [
+        BotCommand("start", "Inicia el bot"),
+        BotCommand("help", "Muestra ayuda"),
+        BotCommand("precio", "Consulta precio de cripto"),
+        BotCommand("post", "Crea un post para el canal"),
+        BotCommand("resumen_texto", "Resume un texto en español"),
+        BotCommand("resumen_url", "Resume una página web en español")
+    ]
+    await application.bot.set_my_commands(commands)
+    await application.bot.set_my_commands(commands, scope=BotCommandScope(chat_id=GROUP_ID))
+
+class TopicFilter(filters.BaseFilter):
+    def filter(self, message):
+        return (
+            message.chat.id == GROUP_ID and
+            message.is_topic_message and
+            message.message_thread_id == TOPIC_ID
         )
 
-    async def handle_confirmation(self, update: Update, context: CallbackContext) -> None:
-        """Maneja la confirmación solo desde el bot"""
-        query = update.callback_query
-        await query.answer()
-        
-        user_id = int(query.data.split('_')[-1])
-        
-        if user_id not in self.ADMIN_IDS:
-            await query.edit_message_text("❌ Acceso no autorizado")
-            return
+def setup_handlers():
+    setup_base_handlers(application)
 
-        if query.data.startswith("confirm_post"):
-            post_data = self.pending_posts.get(user_id)
-            if post_data:
-                try:
-                    await context.bot.send_message(
-                        chat_id=self.CHANNEL_ID,
-                        text=post_data["text"]
-                    )
-                    await query.edit_message_text("✅ Publicado en el canal")
-                except Exception as e:
-                    await query.edit_message_text(f"❌ Error: {str(e)}")
-                finally:
-                    self.pending_posts.pop(user_id, None)
-        else:
-            await query.edit_message_text("❌ Publicación cancelada")
-            self.pending_posts.pop(user_id, None)
+    post_handler.CHANNEL_ID = POST_CHANNEL_ID
+
+    application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
+    application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
+    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
+    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=TopicFilter()))
+    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
+
+    try:
+        asyncio.get_event_loop().create_task(set_commands())
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.create_task(set_commands())
+
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    try:
+        update = Update.de_json(request.json, application.bot)
+        await application.update_queue.put(update)
+        logger.info(f"[{BotMeta.NAME}] Update procesado")
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"Error en webhook: {e}")
+        return "Error", 500
+
+@app.route('/')
+def health_check():
+    return f"{BotMeta.NAME} está activo ✅", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
+
+if __name__ == '__main__':
+    setup_handlers()
+    iniciar_actualizador()
+
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
+    application.run_polling()
