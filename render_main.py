@@ -53,6 +53,13 @@ class TopicFilter(filters.BaseFilter):
             message.message_thread_id == TOPIC_ID
         )
 
+def strict_topic_check(message):
+    return (
+        message.chat.id == GROUP_ID and
+        message.is_topic_message and
+        message.message_thread_id == TOPIC_ID
+    )
+
 def setup_handlers():
     setup_base_handlers(application)
 
