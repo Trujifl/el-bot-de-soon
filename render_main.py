@@ -15,12 +15,11 @@ from src.config import (
     logger,
     BotMeta
 )
-from src.handlers.base import setup_base_handlers
+from src.handlers.base import setup_base_handlers, handle_message
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.handlers.token_query import handle_consulta_token
-from src.handlers.base import handle_message
 from src.services.price_updater import iniciar_actualizador
 
 app = Flask(__name__)
@@ -46,19 +45,22 @@ async def set_commands():
 class TopicFilter(filters.BaseFilter):
     def filter(self, message):
         return (
-            message.chat.id == GROUP_ID
-            and message.is_topic_message
-            and message.message_thread_id == TOPIC_ID
+            message.chat.id == GROUP_ID and
+            message.is_topic_message and
+            message.message_thread_id == TOPIC_ID
         )
 
 def setup_handlers():
     setup_base_handlers(application)
-    application.add_handler(CommandHandler("precio", precio_cripto))
-    application.add_handler(CommandHandler("post", post_handler.handle))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
+
+    application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
+    application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
+    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
+    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=TopicFilter()))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
 
 @app.route('/webhook', methods=['POST'])
 async def webhook():
