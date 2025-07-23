@@ -20,6 +20,7 @@ from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.handlers.token_query import handle_consulta_token
+from src.handlers.message import handle_message
 from src.services.price_updater import iniciar_actualizador
 
 app = Flask(__name__)
@@ -28,7 +29,6 @@ resume_handler = ResumeHandler()
 
 application = Application.builder().token(TOKEN).build()
 
-# 👉 IDs específicos para restringir mensajes
 GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 
@@ -58,7 +58,7 @@ def setup_handlers():
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
 
 @app.route('/webhook', methods=['POST'])
 async def webhook():
