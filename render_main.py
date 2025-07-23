@@ -20,7 +20,7 @@ from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.handlers.token_query import handle_consulta_token
-from src.handlers.message import handle_message
+from src.handlers.base import handle_message
 from src.services.price_updater import iniciar_actualizador
 
 app = Flask(__name__)
