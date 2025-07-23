@@ -18,7 +18,6 @@ from src.config import (
 )
 from src.handlers.base import setup_base_handlers, handle_message
 from src.handlers.crypto import precio_cripto
-from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.handlers.token_query import handle_consulta_token
 from src.services.price_updater import iniciar_actualizador
