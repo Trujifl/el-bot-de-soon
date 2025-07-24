@@ -13,7 +13,7 @@ from telegram.ext import (
 
 from src.handlers.base import start, help_command
 from src.handlers.token_query import precio_cripto
-from src.handlers.post import post_handler
+from src.handlers.post import PostHandler
 from src.handlers.resumen import resume_handler
 from src.utils.filters import MentionedBotFilter, TopicFilter
 from src.config import TOKEN, WEBHOOK_URL
@@ -21,6 +21,8 @@ from src.config import TOKEN, WEBHOOK_URL
 GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 POST_CHANNEL_ID = -1002615396578
+
+post_handler = PostHandler()
 post_handler.CHANNEL_ID = POST_CHANNEL_ID
 
 logging.basicConfig(
@@ -65,7 +67,6 @@ async def set_commands():
     await application.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 def setup_handlers():
-    # Solo responder si es mencionado y está en el topic correcto
     application.add_handler(MessageHandler(
         filters.TEXT & MentionedBotFilter() & TopicFilter(),
         handle_invoked_command
@@ -80,7 +81,6 @@ async def main():
     await set_commands()
     setup_handlers()
 
-    # Webhook
     await application.initialize()
     await application.start()
     await application.bot.set_webhook(url=WEBHOOK_URL)
