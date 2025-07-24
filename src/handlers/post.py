@@ -1,101 +1,45 @@
-import asyncio
-from flask import Flask, request
-from telegram import Update, BotCommand, BotCommandScope
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
-)
-import os
-import threading
-from src.config import (
-    TELEGRAM_TOKEN as TOKEN,
-    logger,
-    BotMeta
-)
-from src.handlers.base import setup_base_handlers, handle_message
-from src.handlers.crypto import precio_cripto
-from src.handlers.resume import ResumeHandler
-from src.handlers.token_query import handle_consulta_token
-from src.services.price_updater import iniciar_actualizador
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ContextTypes
+from src.config import logger
 
-app = Flask(__name__)
-post_handler = PostHandler()
-resume_handler = ResumeHandler()
+class PostHandler:
+    CHANNEL_ID = None  
 
-application = Application.builder().token(TOKEN).build()
+    async def handle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message = update.message
+        if not message:
+            return
 
-GROUP_ID = -1002348706229
-TOPIC_ID = 8183
-POST_CHANNEL_ID = -1002615396578  
+        context.user_data["pending_post"] = message.text
 
-async def set_commands():
-    commands = [
-        BotCommand("start", "Inicia el bot"),
-        BotCommand("help", "Muestra ayuda"),
-        BotCommand("precio", "Consulta precio de cripto"),
-        BotCommand("post", "Crea un post para el canal"),
-        BotCommand("resumen_texto", "Resume un texto en español"),
-        BotCommand("resumen_url", "Resume una página web en español")
-    ]
-    await application.bot.set_my_commands(commands)
-    await application.bot.set_my_commands(commands, scope=BotCommandScope(chat_id=GROUP_ID))
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Confirmar", callback_data="confirm_post_"),
+                InlineKeyboardButton("❌ Cancelar", callback_data="cancel_post_"),
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
 
-class TopicFilter(filters.BaseFilter):
-    def filter(self, message):
-        return (
-            message.chat.id == GROUP_ID and
-            message.is_topic_message and
-            message.message_thread_id == TOPIC_ID
+        await message.reply_text(
+            "¿Quieres publicar este mensaje en el canal?",
+            reply_markup=reply_markup
         )
 
-def setup_handlers():
-    setup_base_handlers(application)
+    async def handle_confirmation(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
 
-    post_handler.CHANNEL_ID = POST_CHANNEL_ID
-
-    application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
-    application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=TopicFilter()))
-    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
-
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
-
-    try:
-        asyncio.get_event_loop().create_task(set_commands())
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.create_task(set_commands())
-
-@app.route('/webhook', methods=['POST'])
-async def webhook():
-    try:
-        update = Update.de_json(request.json, application.bot)
-        await application.update_queue.put(update)
-        logger.info(f"[{BotMeta.NAME}] Update procesado")
-        return "OK", 200
-    except Exception as e:
-        logger.error(f"Error en webhook: {e}")
-        return "Error", 500
-
-@app.route('/')
-def health_check():
-    return f"{BotMeta.NAME} está activo ✅", 200
-
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
-
-if __name__ == '__main__':
-    setup_handlers()
-    iniciar_actualizador()
-
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-
-    application.run_polling()
+        if query.data == "confirm_post_":
+            content = context.user_data.get("pending_post", "")
+            if self.CHANNEL_ID and content:
+                try:
+                    await context.bot.send_message(chat_id=self.CHANNEL_ID, text=content)
+                    await query.edit_message_text("✅ Post publicado correctamente.")
+                except Exception as e:
+                    logger.error(f"Error al publicar en el canal: {e}")
+                    await query.edit_message_text("❌ Error al publicar en el canal.")
+            else:
+                await query.edit_message_text("❌ No se pudo recuperar el mensaje original.")
+        
+        elif query.data == "cancel_post_":
+            await query.edit_message_text("❌ Post cancelado.")
