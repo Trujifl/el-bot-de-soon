@@ -5,8 +5,9 @@ import logging
 from telegram import BotCommand, BotCommandScopeDefault, Update
 from telegram.ext import (
     ApplicationBuilder,
-    ContextTypes,
+    CommandHandler,
     MessageHandler,
+    ContextTypes,
     filters,
 )
 
@@ -24,10 +25,9 @@ logging.basicConfig(
 
 application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
+resume_handler = ResumeHandler()
 post_handler = PostHandler()
 post_handler.CHANNEL_ID = POST_CHANNEL_ID
-
-resume_handler = ResumeHandler()
 
 async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -64,19 +64,18 @@ async def set_commands():
     await application.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
 def setup_handlers():
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("post", post_handler.handle))
+    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
+    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
+    application.add_handler(CommandHandler("precio", precio_cripto))
+
+    application.add_handler(MessageHandler(filters.CallbackQuery, post_handler.handle_confirmation))
+
     application.add_handler(MessageHandler(
-        filters.TEXT & MentionedBotFilter() & TopicFilter(),
+        filters.TEXT & ~filters.COMMAND & MentionedBotFilter() & TopicFilter(),
         handle_invoked_command
-    ))
-
-    application.add_handler(MessageHandler(
-        filters.CallbackQuery,
-        post_handler.handle_confirmation
-    ))
-
-    application.add_handler(MessageHandler(
-        filters.TEXT,
-        lambda update, context: None
     ))
 
 async def main():
