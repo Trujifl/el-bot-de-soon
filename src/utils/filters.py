@@ -1,9 +1,9 @@
 from telegram import Message
-from telegram.ext import filters
+from telegram.ext.filters import MessageFilter
 from src.config import GROUP_ID, TOPIC_ID
 
 
-class MentionedBotFilter(filters.BaseFilter):
+class MentionedBotFilter(MessageFilter):
     def filter(self, message: Message) -> bool:
         if not message.entities:
             return False
@@ -14,6 +14,6 @@ class MentionedBotFilter(filters.BaseFilter):
         )
 
 
-class TopicFilter(filters.BaseFilter):
+class TopicFilter(MessageFilter):
     def filter(self, message: Message) -> bool:
         return message.chat.id == GROUP_ID and message.message_thread_id == TOPIC_ID
