@@ -11,23 +11,25 @@ from telegram.ext import (
     filters,
 )
 
-from src.handlers.base import setup_base_handlers, start, help_command
-from src.handlers.token_query import setup_token_query_handler, precio_cripto
-from src.handlers.post import PostHandler
+from src.handlers.base import start, help_command
+from src.handlers.token_query import precio_cripto
+from src.handlers.post import post_handler
 from src.handlers.resumen import resume_handler
-from src.utils.filters import MentionedBotFilter
+from src.utils.filters import MentionedBotFilter, TopicFilter
 from src.config import TOKEN, WEBHOOK_URL
 
-# Configura logging
+GROUP_ID = -1002348706229
+TOPIC_ID = 8183
+POST_CHANNEL_ID = -1002615396578
+post_handler.CHANNEL_ID = POST_CHANNEL_ID
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
-# Crea la app
 application = ApplicationBuilder().token(TOKEN).build()
 
-# Handler para comandos invocados mencionando al bot
 async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -47,34 +49,28 @@ async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_T
     elif text.startswith("/help"):
         await help_command(update, context)
     else:
-        await update.message.reply_text("🤖 Esos son mis comandos disponibles:\n/start, /help, /precio, /post, /resumen_texto, /resumen_url")
+        await update.message.reply_text(
+            "🤖 Esos son mis comandos disponibles:\n/start, /help, /precio, /post, /resumen_texto, /resumen_url"
+        )
 
-# Comandos visibles en Telegram
 async def set_commands():
     commands = [
         BotCommand("start", "Iniciar el bot"),
         BotCommand("help", "Ver ayuda"),
-        BotCommand("precio", "Ver el precio de un token"),
+        BotCommand("precio", "Consultar precio de un token"),
         BotCommand("post", "Generar un post automático"),
         BotCommand("resumen_texto", "Resumir un texto"),
-        BotCommand("resumen_url", "Resumir una página web")
+        BotCommand("resumen_url", "Resumir una web")
     ]
     await application.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 
-# Setup de todos los handlers
 def setup_handlers():
-    # Handlers de comandos estructurados
-    setup_base_handlers(application)
-    setup_token_query_handler(application)
-    PostHandler().register(application)
-
-    # Mensajes que mencionan al bot
+    # Solo responder si es mencionado y está en el topic correcto
     application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & MentionedBotFilter(),
+        filters.TEXT & MentionedBotFilter() & TopicFilter(),
         handle_invoked_command
     ))
 
-    # Comandos globales
     application.add_handler(MessageHandler(
         filters.COMMAND,
         lambda update, context: None
@@ -84,7 +80,7 @@ async def main():
     await set_commands()
     setup_handlers()
 
-    # Ejecutar con webhook
+    # Webhook
     await application.initialize()
     await application.start()
     await application.bot.set_webhook(url=WEBHOOK_URL)
