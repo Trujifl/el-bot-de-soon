@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 from src.services.openai import generar_respuesta_ia
 from src.utils.personality import Personalidad
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     saludo = Personalidad.get_random_saludo(user.first_name)
@@ -10,6 +11,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{saludo}\n\nSoy SoonBot, tu asistente experto en criptomonedas.",
         parse_mode="Markdown"
     )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
@@ -23,6 +25,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_msg = update.message.text.lower()
-    await update.message.reply_text("🔍 Recibido. Estoy procesando tu mensaje...")
+    user_name = update.effective_user.first_name
+
+    if any(p in user_msg for p in ["precio", "a cuánto", "cuánto vale", "valor de"]):
+        await update.message.reply_text(
+            f"Hola {user_name}, para consultar el precio de una cripto escribe `/precio BTC`, por ejemplo.",
+            parse_mode="Markdown"
+        )
+        return
+
+    respuesta = generar_respuesta_ia(user_msg)
+    await update.message.reply_text(respuesta)
