@@ -1,15 +1,19 @@
 from telegram import Message
-from telegram.ext.filters import MessageFilter
+from telegram.ext import filters
 from src.config import GROUP_ID, TOPIC_ID
 
 
-class MentionedBotFilter(MessageFilter):
+class MentionedBotFilter(filters.BaseFilter):
     def filter(self, message: Message) -> bool:
         if not message.entities:
             return False
-        return any(entity.type == "mention" and message.text[entity.offset:entity.offset + entity.length].lower() == f"@{message.bot.username.lower()}" for entity in message.entities)
+        return any(
+            entity.type == "mention" and
+            message.text[entity.offset:entity.offset + entity.length].lower() == f"@{message.bot.username.lower()}"
+            for entity in message.entities
+        )
 
 
-class TopicFilter(MessageFilter):
+class TopicFilter(filters.BaseFilter):
     def filter(self, message: Message) -> bool:
         return message.chat.id == GROUP_ID and message.message_thread_id == TOPIC_ID
