@@ -6,8 +6,10 @@ from src.services.coingecko import CoinGeckoAPI
 from src.services.coinmarketcap import CoinMarketCapAPI
 from src.services.openai import generar_respuesta_ia
 from src.services.crypto_mapper import crypto_mapper
-from src.utils.filters import MentionedBotFilter
+from src.utils.filters import MentionedBotFilter, TopicFilter
 from src.config import logger
+
+
 
 
 async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -77,6 +79,6 @@ def setup_token_query_handler(application):
     application.add_handler(CommandHandler("precio", precio_cripto))
 
     application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & MentionedBotFilter(),
-        handle_consulta_token
-    ))
+    filters.TEXT & ~filters.COMMAND & MentionedBotFilter() & TopicFilter(),
+    handle_consulta_token
+))
