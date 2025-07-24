@@ -1,77 +1,38 @@
-import asyncio
 import os
-from flask import Flask, request
-from telegram import Update, BotCommand, BotCommandScopeChat
+import asyncio
+import logging
+
+from telegram import BotCommand, BotCommandScopeDefault, Update
 from telegram.ext import (
-    Application,
+    ApplicationBuilder,
+    CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
     ContextTypes,
-    filters
+    filters,
 )
 
-from src.config import (
-    TELEGRAM_TOKEN as TOKEN,
-    logger
-)
-
-from src.handlers.base import start, help_command
-from src.handlers.crypto import precio_cripto
-from src.handlers.resume import ResumeHandler
-from src.handlers.token_query import handle_consulta_token
+from src.handlers.base import setup_base_handlers, start, help_command
+from src.handlers.token_query import setup_token_query_handler, precio_cripto
 from src.handlers.post import PostHandler
+from src.handlers.resumen import resume_handler
+from src.utils.filters import MentionedBotFilter
+from src.config import TOKEN, WEBHOOK_URL
 
-app = Flask(__name__)
-post_handler = PostHandler()
-resume_handler = ResumeHandler()
+# Configura logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
-application = Application.builder().token(TOKEN).build()
+# Crea la app
+application = ApplicationBuilder().token(TOKEN).build()
 
-GROUP_ID = -1002348706229
-TOPIC_ID = 8183
-POST_CHANNEL_ID = -1002615396578
-
-class TopicFilter(filters.BaseFilter):
-    def filter(self, message):
-        return (
-            message.chat.id == GROUP_ID and
-            message.is_topic_message and
-            message.message_thread_id == TOPIC_ID
-        )
-
-class MentionedBotFilter(filters.BaseFilter):
-    def filter(self, message):
-        if not message or not message.text:
-            return False
-        if message.entities:
-            return any(
-                e.type == "mention" and message.text.startswith("@")
-                for e in message.entities
-            )
-        return False
-
-async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
-    if not message:
-        return
-    if not (
-        message.chat.id == GROUP_ID and
-        message.is_topic_message and
-        message.message_thread_id == TOPIC_ID
-    ):
-        return
-
-application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
-
+# Handler para comandos invocados mencionando al bot
 async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
-    text = update.message.text.lower()
-    username = context.bot.username.lower()
-
-    if text.startswith(f"@{username}"):
-        text = text.replace(f"@{username}", "").strip()
+    text = update.message.text.strip()
 
     if text.startswith("/precio"):
         await precio_cripto(update, context)
@@ -86,39 +47,54 @@ async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_T
     elif text.startswith("/help"):
         await help_command(update, context)
     else:
-        await update.message.reply_text("❌ Comando no reconocido o mal escrito.")
+        await update.message.reply_text("🤖 Esos son mis comandos disponibles:\n/start, /help, /precio, /post, /resumen_texto, /resumen_url")
 
-application.add_handler(
-    MessageHandler(filters.TEXT & MentionedBotFilter() & TopicFilter(), handle_invoked_command)
-)
-
-application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
-        return "ok"
-
-# Registrar comandos
+# Comandos visibles en Telegram
 async def set_commands():
     commands = [
-        BotCommand("start", "Inicia el bot"),
-        BotCommand("help", "Muestra ayuda"),
-        BotCommand("precio", "Consulta precio de cripto"),
-        BotCommand("post", "Crea un post para el canal"),
-        BotCommand("resumen_texto", "Resume un texto en español"),
-        BotCommand("resumen_url", "Resume una página web en español")
+        BotCommand("start", "Iniciar el bot"),
+        BotCommand("help", "Ver ayuda"),
+        BotCommand("precio", "Ver el precio de un token"),
+        BotCommand("post", "Generar un post automático"),
+        BotCommand("resumen_texto", "Resumir un texto"),
+        BotCommand("resumen_url", "Resumir una página web")
     ]
-    await application.bot.set_my_commands(commands)
-    await application.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=GROUP_ID))
+    await application.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+
+# Setup de todos los handlers
+def setup_handlers():
+    # Handlers de comandos estructurados
+    setup_base_handlers(application)
+    setup_token_query_handler(application)
+    PostHandler().register(application)
+
+    # Mensajes que mencionan al bot
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & MentionedBotFilter(),
+        handle_invoked_command
+    ))
+
+    # Comandos globales
+    application.add_handler(MessageHandler(
+        filters.COMMAND,
+        lambda update, context: None
+    ))
+
+async def main():
+    await set_commands()
+    setup_handlers()
+
+    # Ejecutar con webhook
+    await application.initialize()
+    await application.start()
+    await application.bot.set_webhook(url=WEBHOOK_URL)
+    await application.updater.start_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        url_path="",
+        webhook_url=WEBHOOK_URL,
+    )
+    await application.updater.idle()
 
 if __name__ == "__main__":
-    async def main():
-        await set_commands()
-        await application.initialize()
-        await application.start()
-
     asyncio.run(main())
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
