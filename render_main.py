@@ -6,6 +6,7 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    ContextTypes,
     BaseHandler,
     filters
 )
@@ -33,27 +34,6 @@ GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 POST_CHANNEL_ID = -1002615396578
 
-class StrictTopicOnlyHandler(BaseHandler):
-    def check_update(self, update):
-        msg = update.message
-        return not (
-            msg and 
-            msg.chat_id == GROUP_ID and 
-            msg.is_topic_message and 
-            msg.message_thread_id == TOPIC_ID
-        )
-
-    async def handle_update(self, update, context):
-        return
-
-class TopicFilter(filters.BaseFilter):
-    def filter(self, message):
-        return (
-            message.chat.id == GROUP_ID and
-            message.is_topic_message and
-            message.message_thread_id == TOPIC_ID
-        )
-
 async def set_commands():
     commands = [
         BotCommand("start", "Inicia el bot"),
@@ -66,13 +46,34 @@ async def set_commands():
     await application.bot.set_my_commands(commands)
     await application.bot.set_my_commands(commands, scope=BotCommandScope(chat_id=GROUP_ID))
 
+class TopicFilter(filters.BaseFilter):
+    def filter(self, message):
+        return (
+            message.chat.id == GROUP_ID and
+            message.is_topic_message and
+            message.message_thread_id == TOPIC_ID
+        )
+
+class StrictTopicOnlyHandler(BaseHandler):
+    def check_update(self, update):
+        msg = getattr(update, "message", None)
+        if not msg:
+            return True  # Silenciosamente ignorar todo lo que no es mensaje
+        return not (
+            msg.chat_id == GROUP_ID and
+            msg.is_topic_message and
+            msg.message_thread_id == TOPIC_ID
+        )
+
+    async def handle_update(self, update, context):
+        return  # No hacemos nada
+
 def setup_handlers():
     setup_base_handlers(application)
 
     post_handler.CHANNEL_ID = POST_CHANNEL_ID
 
     application.add_handler(StrictTopicOnlyHandler(), group=0)
-
     application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
     application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
