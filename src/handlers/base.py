@@ -1,8 +1,8 @@
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, CommandHandler
+
 from src.services.openai import generar_respuesta_ia
 from src.utils.personality import Personalidad
-
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -11,7 +11,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{saludo}\n\nSoy SoonBot, tu asistente experto en criptomonedas.",
         parse_mode="Markdown"
     )
-
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
@@ -24,7 +23,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Escribe solo el comando para ver instrucciones detalladas"
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_msg = update.message.text.lower()
@@ -39,3 +37,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     respuesta = generar_respuesta_ia(user_msg)
     await update.message.reply_text(respuesta)
+
+def setup_base_handlers(application):
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
