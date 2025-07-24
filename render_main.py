@@ -7,6 +7,7 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
     filters,
 )
@@ -14,7 +15,7 @@ from telegram.ext import (
 from src.handlers.base import start, help_command
 from src.handlers.token_query import setup_token_query_handler, precio_cripto
 from src.handlers.post import PostHandler
-from src.handlers.resumen import resume_handler
+from src.handlers.resumen import ResumeHandler
 from src.utils.filters import MentionedBotFilter, TopicFilter
 from src.config import TELEGRAM_TOKEN, WEBHOOK_URL, POST_CHANNEL_ID
 
@@ -24,6 +25,10 @@ logging.basicConfig(
 )
 
 application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+resume_handler = ResumeHandler()
+post_handler = PostHandler()
+post_handler.CHANNEL_ID = POST_CHANNEL_ID
 
 async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
@@ -65,10 +70,12 @@ def setup_handlers():
 
     setup_token_query_handler(application)
 
-    post_handler = PostHandler()
-    post_handler.CHANNEL_ID = POST_CHANNEL_ID
-    application.add_handler(CommandHandler("post", post_handler.handle))
-    application.add_handler(MessageHandler(filters.CallbackQuery, post_handler.handle_confirmation))
+    application.add_handler(MessageHandler(
+        filters.TEXT & filters.Regex(r"^/post") & MentionedBotFilter() & TopicFilter(),
+        post_handler.handle
+    ))
+
+    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation))
 
     application.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & MentionedBotFilter() & TopicFilter(),
