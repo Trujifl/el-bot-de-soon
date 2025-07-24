@@ -32,6 +32,25 @@ GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 POST_CHANNEL_ID = -1002615396578
 
+class TopicFilter(filters.BaseFilter):
+    def filter(self, message):
+        return (
+            message.chat.id == GROUP_ID and
+            message.is_topic_message and
+            message.message_thread_id == TOPIC_ID
+        )
+
+class MentionedBotFilter(filters.BaseFilter):
+    def filter(self, message):
+        if not message or not message.text:
+            return False
+        if message.entities:
+            return any(
+                e.type == "mention" and message.text.startswith("@")
+                for e in message.entities
+            )
+        return False
+
 async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     if not message:
@@ -45,17 +64,6 @@ async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
 
-class MentionedBotFilter(filters.BaseFilter):
-    def filter(self, message):
-        if not message or not message.text:
-            return False
-        if message.entities:
-            return any(
-                e.type == "mention" and message.text.startswith("@")
-                for e in message.entities
-            )
-        return False
-
 async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -63,7 +71,6 @@ async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_T
     text = update.message.text.lower()
     username = context.bot.username.lower()
 
-    # Remover @botname
     if text.startswith(f"@{username}"):
         text = text.replace(f"@{username}", "").strip()
 
@@ -87,14 +94,6 @@ application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, p
 application.add_handler(
     MessageHandler(filters.TEXT & MentionedBotFilter() & TopicFilter(), handle_invoked_command)
 )
-
-class TopicFilter(filters.BaseFilter):
-    def filter(self, message):
-        return (
-            message.chat.id == GROUP_ID and
-            message.is_topic_message and
-            message.message_thread_id == TOPIC_ID
-        )
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
