@@ -35,4 +35,97 @@ POST_CHANNEL_ID = -1002615396578
 class TopicFilter(filters.BaseFilter):
     def filter(self, message):
         return (
-            messa
+            message.chat.id == GROUP_ID and
+            message.is_topic_message and
+            message.message_thread_id == TOPIC_ID
+        )
+
+# ✅ Filtro: solo si mencionan al bot con @
+class MentionedBotFilter(filters.BaseFilter):
+    def filter(self, message):
+        if not message or not message.text:
+            return False
+        if message.entities:
+            return any(
+                e.type == "mention" and message.text.startswith("@")
+                for e in message.entities
+            )
+        return False
+
+# ✅ Middleware para ignorar todo fuera del topic
+async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+    if not message:
+        return
+    if not (
+        message.chat.id == GROUP_ID and
+        message.is_topic_message and
+        message.message_thread_id == TOPIC_ID
+    ):
+        return
+
+application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
+
+# ✅ Handler universal para comandos invocados con @
+async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
+        return
+
+    text = update.message.text.lower()
+    username = context.bot.username.lower()
+
+    # Remover @mención al bot
+    if text.startswith(f"@{username}"):
+        text = text.replace(f"@{username}", "").strip()
+
+    if text.startswith("/precio"):
+        await precio_cripto(update, context)
+    elif text.startswith("/post"):
+        await post_handler.handle(update, context)
+    elif text.startswith("/resumen_texto"):
+        await resume_handler.handle_resumen_texto(update, context)
+    elif text.startswith("/resumen_url"):
+        await resume_handler.handle_resumen_url(update, context)
+    elif text.startswith("/start"):
+        await start(update, context)
+    elif text.startswith("/help"):
+        await help_command(update, context)
+    else:
+        await update.message.reply_text("❌ Comando no reconocido o mal escrito.")
+
+# ✅ Confirmación de post
+application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+
+# ✅ Registro único de comandos invocados con @
+application.add_handler(
+    MessageHandler(filters.TEXT & MentionedBotFilter() & TopicFilter(), handle_invoked_command)
+)
+
+@app.route(f"/{TOKEN}", methods=["POST"])
+async def webhook():
+    if request.method == "POST":
+        await application.update_queue.put(Update.de_json(request.get_json(force=True), application.bot))
+        return "ok"
+
+async def set_commands():
+    commands = [
+        BotCommand("start", "Inicia el bot"),
+        BotCommand("help", "Muestra ayuda"),
+        BotCommand("precio", "Consulta precio de cripto"),
+        BotCommand("post", "Crea un post para el canal"),
+        BotCommand("resumen_texto", "Resume un texto en español"),
+        BotCommand("resumen_url", "Resume una página web en español")
+    ]
+    await application.bot.set_my_commands(commands)
+    await application.bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=GROUP_ID))
+
+# ✅ Entrada principal corregida para evitar conflicto de loops
+if __name__ == "__main__":
+    asyncio.run(set_commands())
+
+    webhook_url = f"{os.environ['WEBHOOK_URL']}/{TOKEN}"
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        webhook_url=webhook_url
+    )
