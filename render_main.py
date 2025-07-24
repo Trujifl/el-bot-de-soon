@@ -12,8 +12,7 @@ import os
 
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
-    logger,
-    BotMeta
+    logger
 )
 
 from src.handlers.base import start, help_command
@@ -32,7 +31,6 @@ GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 POST_CHANNEL_ID = -1002615396578
 
-# ✅ Filtro: solo permite mensajes del grupo y topic autorizados
 class TopicFilter(filters.BaseFilter):
     def filter(self, message):
         return (
@@ -41,7 +39,6 @@ class TopicFilter(filters.BaseFilter):
             message.message_thread_id == TOPIC_ID
         )
 
-# ✅ Filtro: solo si mencionan al bot con @
 class MentionedBotFilter(filters.BaseFilter):
     def filter(self, message):
         if not message or not message.text:
@@ -53,7 +50,6 @@ class MentionedBotFilter(filters.BaseFilter):
             )
         return False
 
-# ✅ Middleware para ignorar todo fuera del topic
 async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     if not message:
@@ -67,7 +63,6 @@ async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
 
-# ✅ Handler universal para comandos invocados con @
 async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
@@ -75,7 +70,6 @@ async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_T
     text = update.message.text.lower()
     username = context.bot.username.lower()
 
-    # Remover @mención al bot
     if text.startswith(f"@{username}"):
         text = text.replace(f"@{username}", "").strip()
 
@@ -94,10 +88,8 @@ async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await update.message.reply_text("❌ Comando no reconocido o mal escrito.")
 
-# ✅ Confirmación de post
 application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
-# ✅ Registro único de comandos invocados con @
 application.add_handler(
     MessageHandler(filters.TEXT & MentionedBotFilter() & TopicFilter(), handle_invoked_command)
 )
@@ -122,10 +114,11 @@ async def set_commands():
 
 async def main():
     await set_commands()
+    webhook_url = f"{os.environ['WEBHOOK_URL']}/{TOKEN}"
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
-        webhook_url=f"{BotMeta.URL}/{TOKEN}"
+        webhook_url=webhook_url
     )
 
 if __name__ == "__main__":
