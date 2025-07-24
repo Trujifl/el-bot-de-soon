@@ -10,7 +10,6 @@ from telegram.ext import (
     filters
 )
 import os
-import threading
 
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
@@ -46,6 +45,7 @@ async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message.message_thread_id == TOPIC_ID
     ):
         return  
+
 application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
 
 async def set_commands():
@@ -76,28 +76,4 @@ def setup_handlers():
 
     application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
     application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=TopicFilter()))
-
-    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
-
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
-
-setup_handlers()
-
-@app.route(f"/{TOKEN}", methods=["POST"])
-async def webhook():
-    if request.method == "POST":
-        await application.update_queue.put(Update.de_json(request.get_json(force=True), application.bot))
-        return "ok"
-
-def run():
-    asyncio.run(set_commands())
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
-        webhook_url=f"{BotMeta.URL}/{TOKEN}"
-    )
-
-threading.Thread(target=run).start()
+    application.add_handler(CommandHandler("res_
