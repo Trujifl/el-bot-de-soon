@@ -11,16 +11,19 @@ from telegram.ext import (
 )
 import os
 import threading
+
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
     logger,
     BotMeta
 )
-from src.handlers.base import setup_base_handlers, handle_message
+
+from src.handlers.base import start, help_command, handle_message
 from src.handlers.crypto import precio_cripto
 from src.handlers.resume import ResumeHandler
 from src.handlers.token_query import handle_consulta_token
 from src.handlers.post import PostHandler
+
 from src.services.price_updater import iniciar_actualizador
 
 app = Flask(__name__)
@@ -33,7 +36,6 @@ GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 POST_CHANNEL_ID = -1002615396578
 
-# Middleware global para evitar mensajes fuera del topic
 async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     if message:
@@ -63,53 +65,34 @@ class TopicFilter(filters.BaseFilter):
         )
 
 def setup_handlers():
-    setup_base_handlers(application)
-
     post_handler.CHANNEL_ID = POST_CHANNEL_ID
 
+    application.add_handler(CommandHandler("start", start))  # fuera del topic si se quiere
+    application.add_handler(CommandHandler("help", help_command))  # fuera del topic si se quiere
     application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
     application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=TopicFilter()))
+
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
 
-    try:
-        asyncio.get_event_loop().create_task(set_commands())
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.create_task(set_commands())
+setup_handlers()
 
-@app.route('/webhook', methods=['POST'])
+@app.route(f"/{TOKEN}", methods=["POST"])
 async def webhook():
-    try:
-        update = Update.de_json(request.json, application.bot)
-        await application.update_queue.put(update)
-        logger.info(f"[{BotMeta.NAME}] Update procesado")
-        return "OK", 200
-    except Exception as e:
-        logger.error(f"Error en webhook: {e}")
-        return "Error", 500
+    if request.method == "POST":
+        await application.update_queue.put(Update.de_json(request.get_json(force=True), application.bot))
+        return "ok"
 
-@app.route('/')
-def health_check():
-    return f"{BotMeta.NAME} está activo ✅", 200
-
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
-
-if __name__ == '__main__':
-    setup_handlers()
-    iniciar_actualizador()
-
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-
+def run():
+    asyncio.run(set_commands())
     application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.getenv("PORT", 8080)),
-        webhook_url=os.getenv("WEBHOOK_URL")
+        port=int(os.environ.get("PORT", 5000)),
+        webhook_url=f"{BotMeta.URL}/{TOKEN}"
     )
+
+threading.Thread(target=run).start()
