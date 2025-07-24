@@ -1,99 +1,230 @@
-import os
-import asyncio
-import logging
+import re
+import requests
+from bs4 import BeautifulSoup
+from telegram import Update
+from telegram.ext import CallbackContext
+from typing import Literal
+from urllib.parse import urlparse
 
-from telegram import BotCommand, BotCommandScopeDefault, Update
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters,
-)
-
-from src.handlers.base import start, help_command
-from src.handlers.token_query import setup_token_query_handler, precio_cripto
-from src.handlers.post import PostHandler
-from src.utils.filters import MentionedBotFilter, TopicFilter
-from src.config import TELEGRAM_TOKEN, WEBHOOK_URL, POST_CHANNEL_ID
-
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
+class ResumeHandler:
+   async def handle_resumen_texto(self, update: Update, context: CallbackContext) -> None:
+    original_text = update.message.text.replace('/resumen_texto', '').strip()
+    
+    if not original_text:
+        await update.message.reply_text(
+            "📝 *Instrucciones para /resumen_texto:*\n\n"
+            "Envía el comando seguido del texto que deseas resumir:\n"
+            "Ejemplo:\n"
+            "`/resumen_texto Bitcoin es una criptomoneda descentralizada...`",
+            parse_mode="Markdown"
+        )
         return
 
-    text = update.message.text.strip()
+    try:
+        content_type = self._classify_content(original_text)
+        summary = self._generate_text_summary(original_text, content_type)
+        await update.message.reply_text(summary, parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error al generar resumen: {str(e)}")
+        
 
-    if text.startswith("/precio"):
-        await precio_cripto(update, context)
-    elif text.startswith("/post"):
-        await post_handler.handle(update, context)
-    elif text.startswith("/resumen_texto"):
-        await resume_handler.handle_resumen_texto(update, context)
-    elif text.startswith("/resumen_url"):
-        await resume_handler.handle_resumen_url(update, context)
-    elif text.startswith("/start"):
-        await start(update, context)
-    elif text.startswith("/help"):
-        await help_command(update, context)
-    else:
+   async def handle_resumen_url(self, update: Update, context: CallbackContext) -> None:
+    url = update.message.text.replace('/resumen_url', '').strip()
+
+    if not url:
         await update.message.reply_text(
-            "🤖 Comandos disponibles:\n/start, /help, /precio, /post, /resumen_texto, /resumen_url"
+            "🌐 *Instrucciones para /resumen_url:*\n\n"
+            "Envía el comando seguido de la URL que deseas resumir:\n"
+            "Ejemplo:\n"
+            "`/resumen_url https://ejemplo.com/articulo-cripto`",
+            parse_mode="Markdown"
         )
+        return
 
-async def set_commands():
-    commands = [
-        BotCommand("start", "Iniciar el bot"),
-        BotCommand("help", "Ver ayuda"),
-        BotCommand("precio", "Consultar precio de un token"),
-        BotCommand("post", "Generar un post automático"),
-        BotCommand("resumen_texto", "Resumir un texto"),
-        BotCommand("resumen_url", "Resumir una web")
-    ]
-    await application.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+    try:
+        title, clean_text = await self._fetch_web_content(url)
+        content_type = self._classify_content(clean_text)
+        summary = self._generate_url_summary(title, clean_text, content_type)
+        await update.message.reply_text(
+            f"🔗 **Resumen de {title}**\n\n{summary}\n\n🌐 Fuente: {self._get_domain(url)}",
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error al procesar URL: {str(e)}")
+        
 
-def setup_handlers():
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
 
-    setup_token_query_handler(application)
+    def _classify_content(self, text: str) -> Literal['blockchain', 'finanzas', 'tecnología', 'general']:
+        """Clasifica automáticamente el tipo de contenido"""
+        crypto_terms = ['blockchain', 'token', 'nft', 'web3', 'defi', 'staking', 'smart contract', 'wallet']
+        finance_terms = ['inversión', 'mercado', 'acciones', 'dividendos', 'bolsa', 'financiero', 'trading']
+        tech_terms = ['IA', 'machine learning', 'cloud', 'software', 'hardware', 'algoritmo']
 
-    post_handler = PostHandler()
-    post_handler.CHANNEL_ID = POST_CHANNEL_ID
-    application.add_handler(CommandHandler("post", post_handler.handle))
-    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation))
+        text_lower = text.lower()
+        
+        if any(term in text_lower for term in crypto_terms):
+            return 'blockchain'
+        elif any(term in text_lower for term in finance_terms):
+            return 'finanzas'
+        elif any(term in text_lower for term in tech_terms):
+            return 'tecnología'
+        return 'general'
 
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & MentionedBotFilter() & TopicFilter(),
-        handle_invoked_command
-    ))
+    def _generate_text_summary(self, text: str, content_type: str) -> str:
+        """Genera resumen estructurado según categoría"""
+        if content_type == 'blockchain':
+            return self._crypto_summary(text)
+        elif content_type == 'finanzas':
+            return self._finance_summary(text)
+        elif content_type == 'tecnología':
+            return self._tech_summary(text)
+        return self._general_summary(text)
 
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        lambda update, context: None
-    ))
+    def _crypto_summary(self, text: str) -> str:
+        """Resumen especializado para contenido blockchain"""
+        components = {
+            '🔹 Proyecto': self._extract_project_name(text),
+            '💰 Tokenomics': self._extract_pattern(r'\$[\d,]+|[\d,]+% APY|\d+ tokens?', text),
+            '🛠️ Mecánicas': self._extract_pattern(r'staking|minteo|gobernanza|NFT|DAO|DeFi|smart contract', text),
+            '📅 Roadmap': self._extract_pattern(r'Temporada \d+|Q\d+ \d{4}|\d{4}-\d{2}', text),
+            '🎯 Beneficios': self._extract_pattern(r'recompensas?|beneficios|ventajas|airdrops?|rewards', text)
+        }
+        return self._format_components(components)
 
-async def main():
-    await set_commands()
-    setup_handlers()
+    def _finance_summary(self, text: str) -> str:
+        """Resumen para contenido financiero"""
+        components = {
+            '📈 Concepto': self._extract_pattern(r'mercado \w+|inversión en \w+|\w+ financiero', text),
+            '💵 Montos': self._extract_pattern(r'\$[\d,]+|[\d,]+% retorno|[\d,]+ acciones', text),
+            '📊 Riesgos': self._extract_pattern(r'riesgos? de \w+|volatilidad|incertidumbre', text),
+            '🔄 Tendencia': self._extract_pattern(r'crecimiento|caída|estabilidad|tendencia \w+', text)
+        }
+        return self._format_components(components)
 
-    await application.initialize()
-    await application.start()
-    await application.bot.set_webhook(url=WEBHOOK_URL)
-    await application.updater.start_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
-        url_path="",
-        webhook_url=WEBHOOK_URL,
-    )
-    await application.updater.idle()
+    def _tech_summary(self, text: str) -> str:
+        """Resumen para contenido tecnológico"""
+        components = {
+            '🤖 Tecnología': self._extract_pattern(r'IA|blockchain|machine learning|IoT|cloud \w+', text),
+            '🚀 Innovación': self._extract_pattern(r'revolución|disruptivo|nuevo paradigma', text),
+            '🛠️ Funciones': self._extract_pattern(r'\w+ en tiempo real|algoritmo de \w+|\d+x más rápido', text),
+            '📱 Aplicación': self._extract_pattern(r'app móvil|plataforma \w+|integración con', text)
+        }
+        return self._format_components(components)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    def _general_summary(self, text: str) -> str:
+        """Resumen genérico estructurado"""
+        key_sentences = re.findall(r'([A-Z][^.!?]*[.!?])', text)[:5]
+        return "📌 Puntos clave:\n\n" + "\n".join(f"• {sentence.strip()}" for sentence in key_sentences)
+
+    # ==================== LÓGICA PARA URLs ====================
+    async def _fetch_web_content(self, url: str) -> tuple:
+        """Extrae y limpia contenido web"""
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept-Language': 'es-ES,es;q=0.9'
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Limpieza avanzada
+            for element in soup(['script', 'style', 'footer', 'nav', 'iframe', 'img']):
+                element.decompose()
+            
+            title = soup.title.string if soup.title else "Contenido Web"
+            
+            content_blocks = []
+            for tag in ['h1', 'h2', 'h3', 'p']:
+                elements = soup.find_all(tag)
+                for el in elements:
+                    text = el.get_text().strip()
+                    if len(text.split()) > 5:  
+                        content_blocks.append(text)
+            
+            return title, "\n".join(content_blocks[:15])  
+            
+        except Exception as e:
+            raise Exception(f"No se pudo procesar la URL: {str(e)}")
+
+    def _generate_url_summary(self, title: str, text: str, content_type: str) -> str:
+        """Genera resumen web según categoría"""
+        if content_type == 'blockchain':
+            return self._crypto_url_summary(title, text)
+        elif content_type == 'finanzas':
+            return self._finance_url_summary(title, text)
+        elif content_type == 'tecnología':
+            return self._tech_url_summary(title, text)
+        return self._general_url_summary(title, text)
+
+    def _crypto_url_summary(self, title: str, text: str) -> str:
+        """Resumen especializado para URLs blockchain"""
+        components = {
+            '📌 Título': title,
+            '💰 Tokenomics': self._extract_pattern(r'\$[\d,]+|[\d,]+% APY|\d+ tokens?', text),
+            '🔄 Mecánicas': self._extract_pattern(r'staking|minteo|gobernanza|NFT|DAO|DeFi', text),
+            '🚀 Actualización': self._extract_pattern(r'lanzamiento|Temporada \d+|Q\d+ \d{4}', text),
+            '🌐 Casos de Uso': self._extract_pattern(r'GameFi|Web3|Metaverso|DEX', text)
+        }
+        return self._format_url_components(components)
+
+    def _finance_url_summary(self, title: str, text: str) -> str:
+        """Resumen para URLs financieras"""
+        components = {
+            '📌 Título': title,
+            '📊 Mercado': self._extract_pattern(r'mercado \w+|índice \w+|sector \w+', text),
+            '📈 Análisis': self._extract_pattern(r'tendencia alcista|presión bajista|soporte en', text),
+            '💡 Recomendación': self._extract_pattern(r'invertir en|evitar \w+|mantener posición', text)
+        }
+        return self._format_url_components(components)
+
+    def _tech_url_summary(self, title: str, text: str) -> str:
+        """Resumen para URLs tecnológicas"""
+        components = {
+            '📌 Título': title,
+            '🤖 Tecnología': self._extract_pattern(r'IA generativa|\d+nm chip|computación cuántica', text),
+            '🔄 Impacto': self._extract_pattern(r'revolucionar \w+|cambiar la industria', text),
+            '📱 Aplicación': self._extract_pattern(r'app móvil|plataforma \w+|integración con', text)
+        }
+        return self._format_url_components(components)
+
+    def _general_url_summary(self, title: str, text: str) -> str:
+        """Resumen genérico para URLs"""
+        key_points = re.findall(r'([A-Z][^.!?]*[.!?])', text)[:5]
+        return f"📌 {title}\n\n" + "🔹 " + "\n🔹 ".join(key_points[:5])
+
+    def _extract_project_name(self, text: str) -> str:
+        """Extrae nombres de proyectos (mayúsculas iniciales)"""
+        matches = re.findall(r'\b([A-Z][a-zA-Z0-9]+)\b', text)
+        return matches[0] if matches else "Proyecto"
+
+    def _extract_pattern(self, pattern: str, text: str) -> str:
+        """Extrae elementos con patrón específico"""
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        unique_matches = list(dict.fromkeys(matches))[:3]  # Eliminar duplicados
+        return "\n".join(f"- {m}" for m in unique_matches) if unique_matches else "No especificado"
+
+    def _format_components(self, components: dict) -> str:
+        """Da formato a los componentes del resumen"""
+        return "\n".join(
+            f"{key}: {value}" 
+            for key, value in components.items() 
+            if value != "No especificado"
+        ) + "\n\n🔍 Resumen generado automáticamente"
+
+    def _format_url_components(self, components: dict) -> str:
+        """Formatea componentes para URLs"""
+        return "\n".join(
+            f"{key}: {value}" 
+            for key, value in components.items() 
+            if value and value != "No especificado"
+        ) + "\n\n📌 Resumen automático"
+
+    def _get_domain(self, url: str) -> str:
+        """Extrae dominio limpio para mostrar"""
+        domain = urlparse(url).netloc
+        clean_domain = domain.replace("www.", "").split(".")[0]
+        return clean_domain.capitalize()
