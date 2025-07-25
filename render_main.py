@@ -1,45 +1,31 @@
-import asyncio
 from flask import Flask, request
-from telegram import Update, BotCommand, BotCommandScope
+from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
     ContextTypes,
-    filters
+    filters,
 )
 import os
-import threading
+import logging
 from src.config import (
     TELEGRAM_TOKEN as TOKEN,
     logger,
     BotMeta
 )
-from src.handlers.base import setup_base_handlers, handle_message
+from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
-from src.handlers.resumen import ResumeHandler
-from src.handlers.token_query import handle_consulta_token, handle_start
 from src.handlers.post import PostHandler
-from src.services.price_updater import iniciar_actualizador
+from src.handlers.resumen import ResumeHandler
+from src.handlers.token_query import handle_consulta_token
 
 app = Flask(__name__)
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
 application = Application.builder().token(TOKEN).build()
-
-GROUP_ID = -1002348706229
-TOPIC_ID = 8183
-POST_CHANNEL_ID = -1002615396578
-
-async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
-    if message:
-        if not (message.chat.id == GROUP_ID and message.is_topic_message and message.message_thread_id == TOPIC_ID):
-            return
-
-application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
 
 async def set_commands():
     commands = [
@@ -51,32 +37,19 @@ async def set_commands():
         BotCommand("resumen_url", "Resume una página web en español")
     ]
     await application.bot.set_my_commands(commands)
-    await application.bot.set_my_commands(commands, scope=BotCommandScope(chat_id=GROUP_ID))
-
-class TopicFilter(filters.BaseFilter):
-    def filter(self, message):
-        return (
-            message.chat.id == GROUP_ID and
-            message.is_topic_message and
-            message.message_thread_id == TOPIC_ID
-        )
 
 def setup_handlers():
     setup_base_handlers(application)
-
-    post_handler.CHANNEL_ID = POST_CHANNEL_ID
-
-    application.add_handler(CommandHandler("start", handle_start, filters=TopicFilter()))
-    application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
-    application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=TopicFilter()))
+    application.add_handler(CommandHandler("precio", precio_cripto))
+    application.add_handler(CommandHandler("post", post_handler.handle))
+    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
+    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_consulta_token))
 
     try:
+        import asyncio
         asyncio.get_event_loop().create_task(set_commands())
     except RuntimeError:
         loop = asyncio.new_event_loop()
@@ -98,21 +71,11 @@ async def webhook():
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
-def run_flask():
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
-
-async def main():
+if __name__ == '__main__':
     setup_handlers()
-    iniciar_actualizador()
 
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-
-    await application.run_webhook(
+    application.run_webhook(
         listen="0.0.0.0",
         port=int(os.getenv("PORT", 8080)),
         webhook_url=os.getenv("WEBHOOK_URL")
     )
-
-if __name__ == '__main__':
-    asyncio.run(main())
