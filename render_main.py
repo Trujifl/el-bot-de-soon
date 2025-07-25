@@ -19,7 +19,7 @@ from src.config import (
 from src.handlers.base import setup_base_handlers, handle_message
 from src.handlers.crypto import precio_cripto
 from src.handlers.resumen import ResumeHandler
-from src.handlers.token_query import handle_consulta_token
+from src.handlers.token_query import handle_consulta_token, handle_start
 from src.handlers.post import PostHandler
 from src.services.price_updater import iniciar_actualizador
 
@@ -37,7 +37,7 @@ async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     if message:
         if not (message.chat.id == GROUP_ID and message.is_topic_message and message.message_thread_id == TOPIC_ID):
-            return  
+            return
 
 application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
 
@@ -66,6 +66,7 @@ def setup_handlers():
 
     post_handler.CHANNEL_ID = POST_CHANNEL_ID
 
+    application.add_handler(CommandHandler("start", handle_start, filters=TopicFilter()))
     application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
     application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
@@ -115,8 +116,3 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
-
-@dp.message_handler(commands=["start"])
-async def handle_start(message: types.Message):
-    if message.chat.id == GROUP_ID and message.message_thread_id == TOPIC_ID:
-        await message.reply("✅ ¡Hola! Estoy activo en este hilo y listo para ayudarte 🚀")
