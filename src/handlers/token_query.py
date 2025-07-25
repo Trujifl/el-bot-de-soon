@@ -1,84 +1,40 @@
-from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
+import logging
+from aiogram import types
+from aiogram.dispatcher.filters import BoundFilter
+from src.services.crypto_mapper import CryptoMapper
+from src.services.coingecko import get_price_coingecko
+from src.services.coinmarketcap import get_price_cmc
+from src.services.price_opinion import generar_respuesta_ia
 
-from src.services.price_updater import get_precio_desde_cache
-from src.services.coingecko import CoinGeckoAPI
-from src.services.coinmarketcap import CoinMarketCapAPI
-from src.services.openai import generar_respuesta_ia
-from src.services.crypto_mapper import crypto_mapper
-from src.utils.filters import MentionedBotFilter, TopicFilter
-from src.config import logger
+logger = logging.getLogger(__name__)
+crypto_mapper = CryptoMapper()
 
-
-
-
-async def precio_cripto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text("❌ Debes indicar un token. Ejemplo: /precio BTC")
+async def handle_token_query(message: types.Message):
+    logger.info(f"📨 Mensaje recibido: '{message.text}' de @{message.from_user.username} en {message.chat.id}/{message.message_thread_id}")
+    
+    if message.chat.id != GROUP_ID or message.message_thread_id != TOPIC_ID:
         return
 
-    token = context.args[0].upper()
-    resultado = CoinGeckoAPI.obtener_precio(token) or CoinMarketCapAPI.obtener_precio(token)
+    token_ids = crypto_mapper.extraer_tokens_mencionados(message.text)
+    if not token_ids:
+        respuesta = await generar_respuesta_ia(message.text)
+        await message.reply(respuesta)
+        return
 
-    if resultado and "precio" in resultado:
-        nombre = resultado.get("nombre", token.upper())
-        precio = resultado["precio"]
-        cambio = resultado.get("cambio_24h", 0)
-        tendencia = "📈" if cambio >= 0 else "📉"
-
-        await update.message.reply_text(
-            f"💰 *{nombre}*\n"
-            f"Precio actual: *${precio}*\n"
-            f"Cambio 24h: *{cambio}%* {tendencia}",
-            parse_mode="Markdown"
-        )
-    else:
-        await update.message.reply_text(f"⚠️ No pude obtener el precio de {token}.")
-
-
-async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        query = update.message.text.lower()
-        posibles_monedas = crypto_mapper.extraer_tokens_mencionados(query)
-
-        if not posibles_monedas:
-            await update.message.reply_text("❌ No identifiqué una criptomoneda en tu mensaje.")
-            return
-
-        token = posibles_monedas[0]
-        cripto_id = crypto_mapper.find_coin(token)
-
-        datos = get_precio_desde_cache(cripto_id) if cripto_id else None
-        if not datos and cripto_id:
-            datos = CoinGeckoAPI.obtener_precio(cripto_id)
-
-        if not datos:
-            datos = CoinMarketCapAPI.obtener_precio(token)
-
-        if datos:
-            nombre = datos.get('nombre', token.capitalize())
-            simbolo = datos.get('symbol') or datos.get('simbolo') or token.upper()
-            precio = datos.get('precio', 0)
-            cambio = datos.get('cambio_24h', 0)
-            tendencia = "📈" if cambio >= 0 else "📉"
-
-            texto = (
-                f"🔹 *{nombre} ({simbolo})*\n"
-                f"💵 Precio: ${precio:.4f}\n"
-                f"{tendencia} Cambio 24h: {cambio:.2f}%"
-            )
-            await update.message.reply_text(texto, parse_mode="Markdown")
+    respuestas = []
+    for token_id in token_ids:
+        data = get_price_coingecko(token_id)
+        if not data:
+            data = get_price_cmc(token_id)
+        if data:
+            nombre = data.get("name")
+            precio = data.get("price")
+            symbol = data.get("symbol")
+            respuesta = f"💰 {nombre} ({symbol}): ${precio}"
         else:
-            await update.message.reply_text("⚠️ No pude obtener el precio actual.")
-    except Exception as e:
-        logger.exception("Error procesando consulta token")
-        await update.message.reply_text("⚠️ Ocurrió un error al procesar tu consulta.")
+            respuesta = f"No pude obtener el precio de {token_id}."
+        respuestas.append(respuesta)
 
-
-def setup_token_query_handler(application):
-    application.add_handler(CommandHandler("precio", precio_cripto))
-
-    application.add_handler(MessageHandler(
-    filters.TEXT & ~filters.COMMAND & MentionedBotFilter() & TopicFilter(),
-    handle_consulta_token
-))
+    texto = "\n".join(respuestas)
+    opinion = await generar_respuesta_ia(message.text)
+    await message.reply(f"{texto}\n\n{opinion}")
