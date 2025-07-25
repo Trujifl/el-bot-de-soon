@@ -2,7 +2,7 @@ import logging
 from telegram import Update, Message
 from telegram.ext import ContextTypes
 from src.services.crypto_mapper import CryptoMapper
-from src.services.coingecko import get_price_coingecko
+from src.services.coingecko import CoinGeckoAPI
 from src.services.coinmarketcap import get_price_cmc
 from src.services.price_opinion import generar_respuesta_ia
 
@@ -32,16 +32,19 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
 
     respuestas = []
     for token_id in token_ids:
-        data = get_price_coingecko(token_id)
-        if not data:
+        try:
+            data = CoinGeckoAPI.obtener_precio(token_id)
+        except Exception:
             data = get_price_cmc(token_id)
+
         if data:
-            nombre = data.get("name")
-            precio = data.get("price")
-            symbol = data.get("symbol")
-            respuesta = f"💰 {nombre} ({symbol}): ${precio}"
+            nombre = data.get("nombre")
+            precio = data.get("precio")
+            simbolo = data.get("simbolo")
+            respuesta = f"💰 {nombre} ({simbolo}): ${precio}"
         else:
             respuesta = f"No pude obtener el precio de {token_id}."
+
         respuestas.append(respuesta)
 
     texto = "\n".join(respuestas)
