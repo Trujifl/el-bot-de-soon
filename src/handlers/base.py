@@ -1,7 +1,10 @@
+import logging
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 from src.services.openai import generar_respuesta_ia
 from src.utils.personality import Personalidad
+
+logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -34,10 +37,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    respuesta = generar_respuesta_ia(user_msg)
+    respuesta = await generar_respuesta_ia(user_msg, user_name)
     await update.message.reply_text(respuesta)
 
 async def handle_comando_general(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"✅ Comando recibido: {update.message.text}")
     text = update.message.text or ""
 
     if "/start" in text:
@@ -51,12 +55,13 @@ async def handle_comando_general(update: Update, context: ContextTypes.DEFAULT_T
     elif "/post" in text:
         await update.message.reply_text("📢 Has invocado `/post`. Este comando requiere permisos especiales.")
     else:
-        respuesta = generar_respuesta_ia(text)
+        respuesta = await generar_respuesta_ia(text, update.effective_user.first_name)
         await update.message.reply_text(respuesta)
 
 def setup_base_handlers(application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
 
+    # ✅ Captura todos los comandos con @ en grupos (modo privacidad activado)
     from telegram.ext import MessageHandler, filters
     application.add_handler(MessageHandler(filters.COMMAND, handle_comando_general))
