@@ -1,97 +1,118 @@
-import os
 import asyncio
-import logging
-
-from telegram import BotCommand, BotCommandScopeDefault, Update
+from flask import Flask, request
+from telegram import Update, BotCommand, BotCommandScope
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
-    filters,
+    filters
 )
-
-from src.handlers.base import start, help_command
-from src.handlers.token_query import setup_token_query_handler, precio_cripto
+import os
+import threading
+from src.config import (
+    TELEGRAM_TOKEN as TOKEN,
+    logger,
+    BotMeta
+)
+from src.handlers.base import setup_base_handlers, handle_message
+from src.handlers.crypto import precio_cripto
+from src.handlers.resume import ResumeHandler
+from src.handlers.token_query import handle_consulta_token
 from src.handlers.post import PostHandler
-from src.handlers.resumen import ResumeHandler
-from src.utils.filters import MentionedBotFilter, TopicFilter
-from src.config import TELEGRAM_TOKEN, WEBHOOK_URL, POST_CHANNEL_ID
+from src.services.price_updater import iniciar_actualizador
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-
-application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-resume_handler = ResumeHandler()
+app = Flask(__name__)
 post_handler = PostHandler()
-post_handler.CHANNEL_ID = POST_CHANNEL_ID
+resume_handler = ResumeHandler()
 
-async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message or not update.message.text:
-        return
+application = Application.builder().token(TOKEN).build()
 
-    text = update.message.text.strip()
+GROUP_ID = -1002348706229
+TOPIC_ID = 8183
+POST_CHANNEL_ID = -1002615396578
 
-    if text.startswith("/precio"):
-        await precio_cripto(update, context)
-    elif text.startswith("/post"):
-        await post_handler.handle(update, context)
-    elif text.startswith("/resumen_texto"):
-        await resume_handler.handle_resumen_texto(update, context)
-    elif text.startswith("/resumen_url"):
-        await resume_handler.handle_resumen_url(update, context)
-    elif text.startswith("/start"):
-        await start(update, context)
-    elif text.startswith("/help"):
-        await help_command(update, context)
-    else:
-        await update.message.reply_text(
-            "🤖 Comandos disponibles:\n/start, /help, /precio, /post, /resumen_texto, /resumen_url"
-        )
+# Middleware global para evitar mensajes fuera del topic
+async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+    if message:
+        if not (message.chat.id == GROUP_ID and message.is_topic_message and message.message_thread_id == TOPIC_ID):
+            return  # Ignorar cualquier mensaje fuera del topic
+
+application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
 
 async def set_commands():
     commands = [
-        BotCommand("start", "Iniciar el bot"),
-        BotCommand("help", "Ver ayuda"),
-        BotCommand("precio", "Consultar precio de un token"),
-        BotCommand("post", "Generar un post automático"),
-        BotCommand("resumen_texto", "Resumir un texto"),
-        BotCommand("resumen_url", "Resumir una web")
+        BotCommand("start", "Inicia el bot"),
+        BotCommand("help", "Muestra ayuda"),
+        BotCommand("precio", "Consulta precio de cripto"),
+        BotCommand("post", "Crea un post para el canal"),
+        BotCommand("resumen_texto", "Resume un texto en español"),
+        BotCommand("resumen_url", "Resume una página web en español")
     ]
-    await application.bot.set_my_commands(commands, scope=BotCommandScopeDefault())
+    await application.bot.set_my_commands(commands)
+    await application.bot.set_my_commands(commands, scope=BotCommandScope(chat_id=GROUP_ID))
+
+class TopicFilter(filters.BaseFilter):
+    def filter(self, message):
+        return (
+            message.chat.id == GROUP_ID and
+            message.is_topic_message and
+            message.message_thread_id == TOPIC_ID
+        )
 
 def setup_handlers():
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("post", post_handler.handle))
-    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
-    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
-    application.add_handler(CommandHandler("precio", precio_cripto))
+    setup_base_handlers(application)
 
-    application.add_handler(MessageHandler(filters.CallbackQuery, post_handler.handle_confirmation))
+    post_handler.CHANNEL_ID = POST_CHANNEL_ID
 
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & MentionedBotFilter() & TopicFilter(),
-        handle_invoked_command
-    ))
+    application.add_handler(CommandHandler("precio", precio_cripto, filters=TopicFilter()))
+    application.add_handler(CommandHandler("post", post_handler.handle, filters=TopicFilter()))
+    application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=TopicFilter()))
+    application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=TopicFilter()))
+    application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & TopicFilter(), handle_consulta_token))
+
+    try:
+        asyncio.get_event_loop().create_task(set_commands())
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.create_task(set_commands())
+
+@app.route('/webhook', methods=['POST'])
+async def webhook():
+    try:
+        update = Update.de_json(request.json, application.bot)
+        await application.update_queue.put(update)
+        logger.info(f"[{BotMeta.NAME}] Update procesado")
+        return "OK", 200
+    except Exception as e:
+        logger.error(f"Error en webhook: {e}")
+        return "Error", 500
+
+@app.route('/')
+def health_check():
+    return f"{BotMeta.NAME} está activo ✅", 200
+
+def run_flask():
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8080)))
 
 async def main():
-    await set_commands()
     setup_handlers()
+    iniciar_actualizador()
 
-    await application.initialize()
-    await application.start()
-    await application.bot.set_webhook(url=WEBHOOK_URL)
-    await application.updater.start_webhook(
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+
+    await application.run_webhook(
         listen="0.0.0.0",
-        port=int(os.environ.get("PORT", 5000)),
-        url_path="",
-        webhook_url=WEBHOOK_URL,
+        port=int(os.getenv("PORT", 8080)),
+        webhook_url=os.getenv("WEBHOOK_URL")
     )
-    await application.updater.idle()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())
