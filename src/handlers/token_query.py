@@ -4,7 +4,7 @@ from telegram.ext import ContextTypes
 from src.services.crypto_mapper import CryptoMapper
 from src.services.coingecko import CoinGeckoAPI
 from src.services.coinmarketcap import CoinMarketCapAPI
-from src.services.price_opinion import generar_respuesta_ia
+from src.services.openai import generar_respuesta_ia
 
 logger = logging.getLogger(__name__)
 crypto_mapper = CryptoMapper()
@@ -15,7 +15,7 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
 
     token_ids = crypto_mapper.extraer_tokens_mencionados(message.text)
     if not token_ids:
-        respuesta = await generar_respuesta_ia(message.text)
+        respuesta = await generar_respuesta_ia(message.text, message.from_user.first_name)
         await message.reply_text(respuesta)
         return
 
@@ -37,5 +37,5 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
         respuestas.append(respuesta)
 
     texto = "\n".join(respuestas)
-    opinion = await generar_respuesta_ia(message.text)
+    opinion = await generar_respuesta_ia(message.text, message.from_user.first_name)
     await message.reply_text(f"{texto}\n\n{opinion}")
