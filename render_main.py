@@ -1,13 +1,15 @@
+# render_main.py - Versión final funcional
 from flask import Flask, request
-from telegram import Update, BotCommand
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
     filters,
+    CallbackQueryHandler,
+    ContextTypes
 )
+from telegram import BotCommand
 import os
 import logging
 from src.config import (
@@ -15,11 +17,10 @@ from src.config import (
     logger,
     BotMeta
 )
-from src.handlers.base import setup_base_handlers, handle_comando_general
+from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
-from src.handlers.resumen import ResumeHandler
-from src.handlers.token_query import handle_consulta_token
+from src.handlers.resume import ResumeHandler
 
 app = Flask(__name__)
 post_handler = PostHandler()
@@ -38,27 +39,16 @@ async def set_commands():
     ]
     await application.bot.set_my_commands(commands)
 
+# Configura todos los handlers
 def setup_handlers():
     setup_base_handlers(application)
-
     application.add_handler(CommandHandler("precio", precio_cripto))
     application.add_handler(CommandHandler("post", post_handler.handle))
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
-    application.add_handler(MessageHandler(filters.COMMAND, handle_comando_general))
-
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_consulta_token))
-
-    try:
-        import asyncio
-        asyncio.get_event_loop().create_task(set_commands())
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.create_task(set_commands())
-
+# Endpoint para webhooks
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
@@ -70,14 +60,13 @@ async def webhook():
         logger.error(f"Error en webhook: {e}")
         return "Error", 500
 
+# Health check
 @app.route('/')
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
+# Inicialización (se ejecuta solo al iniciar el servidor)
 if __name__ == '__main__':
     setup_handlers()
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.getenv("PORT", 8080)),
-        webhook_url=os.getenv("WEBHOOK_URL")
-    )
+    application.run_polling()  # Solo para desarrollo local
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
