@@ -33,12 +33,11 @@ GROUP_ID = -1002348706229
 TOPIC_ID = 8183
 POST_CHANNEL_ID = -1002615396578
 
-# Middleware global para evitar mensajes fuera del topic
 async def topic_guard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     if message:
         if not (message.chat.id == GROUP_ID and message.is_topic_message and message.message_thread_id == TOPIC_ID):
-            return  # Ignorar cualquier mensaje fuera del topic
+            return  
 
 application.add_handler(MessageHandler(filters.ALL, topic_guard), group=0)
 
@@ -116,3 +115,8 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
+@dp.message_handler(commands=["start"])
+async def handle_start(message: types.Message):
+    if message.chat.id == GROUP_ID and message.message_thread_id == TOPIC_ID:
+        await message.reply("✅ ¡Hola! Estoy activo en este hilo y listo para ayudarte 🚀")
