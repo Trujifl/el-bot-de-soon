@@ -3,7 +3,7 @@ from telegram import Update, Message
 from telegram.ext import ContextTypes
 from src.services.crypto_mapper import CryptoMapper
 from src.services.coingecko import CoinGeckoAPI
-from src.services.coinmarketcap import obtener_precio_desde_coinmarketcap
+from src.services.coinmarketcap import CoinMarketCapAPI
 from src.services.price_opinion import generar_respuesta_ia
 
 logger = logging.getLogger(__name__)
@@ -24,12 +24,12 @@ async def handle_consulta_token(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             data = CoinGeckoAPI.obtener_precio(token_id)
         except Exception:
-            data = obtener_precio_desde_coinmarketcap(token_id)
+            data = CoinMarketCapAPI.obtener_precio(token_id)
 
         if data:
             nombre = data.get("nombre")
             precio = data.get("precio")
-            simbolo = data.get("simbolo")
+            simbolo = data.get("symbol")
             respuesta = f"💰 {nombre} ({simbolo}): ${precio}"
         else:
             respuesta = f"No pude obtener el precio de {token_id}."
