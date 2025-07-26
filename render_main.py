@@ -1,4 +1,3 @@
-# render_main.py - Versión final funcional con filtros estrictos de mención y topic
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import (
