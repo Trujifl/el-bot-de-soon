@@ -12,7 +12,7 @@ from telegram.ext import (
 )
 
 from src.handlers.base import start, help_command
-from src.handlers.token_query import precio_cripto
+from src.handlers.token_query import setup_token_query_handler
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.utils.filters import MentionedBotFilter, TopicFilter
@@ -34,9 +34,7 @@ async def handle_invoked_command(update: Update, context: ContextTypes.DEFAULT_T
 
     text = update.message.text.strip()
 
-    if text.startswith("/precio"):
-        await precio_cripto(update, context)
-    elif text.startswith("/post"):
+    if text.startswith("/post"):
         await post_handler.handle(update, context)
     elif text.startswith("/resumen_texto"):
         await resume_handler.handle_resumen_texto(update, context)
@@ -65,6 +63,8 @@ async def set_commands():
 def setup_handlers():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+
+    setup_token_query_handler(application)
 
     application.add_handler(CommandHandler("post", post_handler.handle))
     application.add_handler(MessageHandler(filters.CallbackQuery, post_handler.handle_confirmation))
