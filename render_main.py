@@ -1,5 +1,5 @@
 from flask import Flask, request
-from telegram import Update, BotCommand
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -8,10 +8,14 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
+from telegram import BotCommand
 import os
 import logging
-import threading
-from src.config import TELEGRAM_TOKEN as TOKEN, logger, BotMeta
+from src.config import (
+    TELEGRAM_TOKEN as TOKEN,
+    logger,
+    BotMeta
+)
 from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
@@ -59,10 +63,8 @@ async def webhook():
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
-def run_polling():
-    setup_handlers()
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 if __name__ == '__main__':
-    threading.Thread(target=run_polling, daemon=True).start()
+    setup_handlers()
+    import asyncio
+    asyncio.run(set_commands())
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
