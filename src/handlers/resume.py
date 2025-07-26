@@ -24,7 +24,8 @@ class ResumeHandler:
         try:
             content_type = self._classify_content(original_text)
             summary = await self._generate_openai_summary(original_text, content_type)
-            await update.message.reply_text(summary, parse_mode="Markdown")
+            for chunk in self._split_text(summary):
+                await update.message.reply_text(chunk, parse_mode="Markdown")
         except Exception as e:
             await update.message.reply_text(f"❌ Error al generar resumen: {str(e)}")
 
@@ -46,11 +47,11 @@ class ResumeHandler:
             content_type = self._classify_content(clean_text)
             summary = await self._generate_openai_summary(clean_text, content_type)
             fuente = self._get_domain(url)
-            await update.message.reply_text(
-                f"🔗 **Resumen de {title}**\n\n{summary}\n\n🌐 Fuente: {fuente}",
-                parse_mode="Markdown",
-                disable_web_page_preview=True
-            )
+            header = f"🔗 **Resumen de {title}**\n\n"
+            footer = f"\n\n🌐 Fuente: {fuente}"
+            full_message = header + summary + footer
+            for chunk in self._split_text(full_message):
+                await update.message.reply_text(chunk, parse_mode="Markdown", disable_web_page_preview=True)
         except Exception as e:
             await update.message.reply_text(f"❌ Error al procesar URL: {str(e)}")
 
@@ -152,3 +153,18 @@ Usa viñetas y encabezados solo si es necesario"""
         domain = urlparse(url).netloc
         clean_domain = domain.replace("www.", "").split(".")[0]
         return clean_domain.capitalize()
+
+    def _split_text(self, text: str, limit: int = 4000) -> list:
+        lines = text.split("\n")
+        chunks = []
+        current = ""
+
+        for line in lines:
+            if len(current) + len(line) + 1 > limit:
+                chunks.append(current.strip())
+                current = line + "\n"
+            else:
+                current += line + "\n"
+        if current.strip():
+            chunks.append(current.strip())
+        return chunks
