@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 from src.config import logger
 
 class PostHandler:
-    CHANNEL_ID = -1002348706229  
+    CHANNEL_ID = -1002348706229 
     TOPIC_ID = 8222              
 
     async def handle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -11,7 +11,20 @@ class PostHandler:
         if not message:
             return
 
-        context.user_data["pending_post"] = message.text
+        content = message.text.replace("/post", "").strip()
+
+        if not content:
+            await update.message.reply_text(
+                "📢 *Instrucciones para /post:*\n\n"
+                "Envía el comando seguido del contenido de tu publicación:\n"
+                "*Formato recomendado:*\n"
+                "/post Título de tu publicación\nContenido detallado aquí...\n#hashtags #opcionales\n\n"
+                "*Ejemplo completo:*\n/post Análisis de mercado\nBitcoin muestra tendencia alcista...\n#BTC #Cripto",
+                parse_mode="Markdown"
+            )
+            return
+
+        context.user_data["pending_post"] = content
 
         keyboard = [
             [
@@ -37,7 +50,8 @@ class PostHandler:
                     await context.bot.send_message(
                         chat_id=self.CHANNEL_ID,
                         message_thread_id=self.TOPIC_ID,
-                        text=content
+                        text=content,
+                        disable_web_page_preview=True
                     )
                     await query.edit_message_text("✅ Post publicado correctamente.")
                 except Exception as e:
