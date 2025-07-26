@@ -13,13 +13,9 @@ class ResumeHandler:
 
         if not original_text:
             await update.message.reply_text(
-                "📝 *Instrucciones para /resumen_texto:*
-
-"
-                "Envía el comando seguido del texto que deseas resumir:
-"
-                "Ejemplo:
-"
+                "📝 *Instrucciones para /resumen_texto:*\n\n"
+                "Envía el comando seguido del texto que deseas resumir:\n"
+                "Ejemplo:\n"
                 "`/resumen_texto Bitcoin es una criptomoneda descentralizada...`",
                 parse_mode="Markdown"
             )
@@ -38,13 +34,9 @@ class ResumeHandler:
 
         if not url:
             await update.message.reply_text(
-                "🌐 *Instrucciones para /resumen_url:*
-
-"
-                "Envía el comando seguido de la URL que deseas resumir:
-"
-                "Ejemplo:
-"
+                "🌐 *Instrucciones para /resumen_url:*\n\n"
+                "Envía el comando seguido de la URL que deseas resumir:\n"
+                "Ejemplo:\n"
                 "`/resumen_url https://ejemplo.com/articulo-cripto`",
                 parse_mode="Markdown"
             )
