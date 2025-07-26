@@ -145,7 +145,7 @@ Usa viñetas y encabezados solo si es necesario"""
                     text = el.get_text().strip()
                     if len(text.split()) > 5:
                         content_blocks.append(text)
-            return title, "\n".join(content_blocks[:15])
+            return title, "\n".join(content_blocks[:30])
         except Exception as e:
             raise Exception(f"No se pudo procesar la URL: {str(e)}")
 
