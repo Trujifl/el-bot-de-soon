@@ -71,56 +71,54 @@ class ResumeHandler:
     async def _generate_openai_summary(self, text: str, tipo: str) -> str:
         if tipo == 'blockchain':
             instrucciones = """🔹 Proyecto
-- Breve descripción del proyecto
+Breve descripción general del proyecto
 
 💰 Tokenomics
-- Datos sobre el suministro, utilidad o beneficios del token
+Aspectos financieros del token como utilidad, emisión, valor o circulación
 
 🛠️ Mecánicas
-- Cómo funciona el sistema, interacciones clave, uso de tecnología
+Mecanismos de funcionamiento, tecnología o contratos inteligentes
 
 📅 Roadmap
-- Fechas, etapas futuras, lanzamientos
+Fechas clave, hitos futuros o versiones planificadas
 
 🎯 Beneficios
-- Incentivos, airdrops, recompensas, ventajas del ecosistema"""
+Ventajas, recompensas, incentivos o atractivo para la comunidad"""
         elif tipo == 'finanzas':
             instrucciones = """📈 Concepto
-- Define el tema financiero principal
+Tema principal y su aplicación
 
 💵 Montos
-- Números, tasas o inversiones destacadas
+Datos numéricos relevantes o condiciones económicas
 
 📊 Riesgos
-- Volatilidad, factores externos, vulnerabilidades
+Factores de volatilidad, incertidumbre o advertencias
 
 🔄 Tendencia
-- Movimiento reciente o proyectado en el mercado"""
+Dirección reciente o proyectada del fenómeno financiero"""
         elif tipo == 'tecnología':
             instrucciones = """🤖 Tecnología
-- ¿Qué tecnología se describe?
+Nombre y naturaleza de la innovación
 
 🚀 Innovación
-- ¿Qué la hace novedosa?
+Qué la hace diferente o disruptiva
 
 🛠️ Funciones
-- ¿Qué puede hacer exactamente?
+Para qué sirve y cómo funciona
 
 📱 Aplicación
-- ¿Dónde se usa? ¿Cómo se integra?"""
+Casos de uso o entornos donde se implementa"""
         else:
             instrucciones = """🔹 Puntos clave
-- Lista clara de ideas centrales con viñetas
-- Sin repeticiones ni relleno"""
+Resumen general con ideas principales y conceptos destacados\nUsa viñetas y encabezados solo si es necesario"""
 
         prompt = (
-            "Eres un asistente que redacta resúmenes visuales y estructurados en español. "
-            "Usa emojis llamativos como encabezados y viñetas según el contexto del contenido "
-            "(por ejemplo, 💡 para ideas, 🎮 para juegos, 📊 para finanzas, 🔹 para bloques generales). "
-            "Organiza el texto en bloques con títulos claros, separados por líneas en blanco. "
-            "Adapta el estilo a la temática sin perder profesionalismo.\n\n"
-            f"Tipo de contenido: {tipo}. Estructura sugerida:\n\n{instrucciones}\n\n"
-            f"Texto a resumir:\n{text}\n\n"
+            "Eres un asistente profesional que redacta resúmenes temáticos con formato visual estructurado.\n"
+            "Tu respuesta debe estar en español, contener encabezados con emojis temáticos\n"
+            "(como 🔹, 💰, 📊, 🎯, 🛠️, etc.) según la categoría, y tener líneas vacías entre secciones.\n"
+            "Evita repetir información o inventar secciones adicionales.\n"
+            "Sigue estrictamente la siguiente estructura por tipo:\n\n"
+            f"{instrucciones}\n\nTexto a resumir:\n{text}\n\n"
             "📌 Resumen generado automáticamente."
         )
 
