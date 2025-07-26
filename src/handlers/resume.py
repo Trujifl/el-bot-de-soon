@@ -70,8 +70,7 @@ class ResumeHandler:
 
     async def _generate_openai_summary(self, text: str, tipo: str) -> str:
         if tipo == 'blockchain':
-            instrucciones = (
-                "🔹 Proyecto
+            instrucciones = """🔹 Proyecto
 - Breve descripción del proyecto
 
 💰 Tokenomics
@@ -84,11 +83,9 @@ class ResumeHandler:
 - Fechas, etapas futuras, lanzamientos
 
 🎯 Beneficios
-- Incentivos, airdrops, recompensas, ventajas del ecosistema"
-            )
+- Incentivos, airdrops, recompensas, ventajas del ecosistema"""
         elif tipo == 'finanzas':
-            instrucciones = (
-                "📈 Concepto
+            instrucciones = """📈 Concepto
 - Define el tema financiero principal
 
 💵 Montos
@@ -98,11 +95,9 @@ class ResumeHandler:
 - Volatilidad, factores externos, vulnerabilidades
 
 🔄 Tendencia
-- Movimiento reciente o proyectado en el mercado"
-            )
+- Movimiento reciente o proyectado en el mercado"""
         elif tipo == 'tecnología':
-            instrucciones = (
-                "🤖 Tecnología
+            instrucciones = """🤖 Tecnología
 - ¿Qué tecnología se describe?
 
 🚀 Innovación
@@ -112,14 +107,11 @@ class ResumeHandler:
 - ¿Qué puede hacer exactamente?
 
 📱 Aplicación
-- ¿Dónde se usa? ¿Cómo se integra?"
-            )
+- ¿Dónde se usa? ¿Cómo se integra?"""
         else:
-            instrucciones = (
-                "🔹 Puntos clave
+            instrucciones = """🔹 Puntos clave
 - Lista clara de ideas centrales con viñetas
-- Sin repeticiones ni relleno"
-            )
+- Sin repeticiones ni relleno"""
 
         prompt = (
             "Eres un asistente que genera resúmenes en español con estilo visual agradable.\n"
