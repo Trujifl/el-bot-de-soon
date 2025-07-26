@@ -13,9 +13,13 @@ class ResumeHandler:
 
         if not original_text:
             await update.message.reply_text(
-                "📝 *Instrucciones para /resumen_texto:*\n\n"
-                "Envía el comando seguido del texto que deseas resumir:\n"
-                "Ejemplo:\n"
+                "📝 *Instrucciones para /resumen_texto:*
+
+"
+                "Envía el comando seguido del texto que deseas resumir:
+"
+                "Ejemplo:
+"
                 "`/resumen_texto Bitcoin es una criptomoneda descentralizada...`",
                 parse_mode="Markdown"
             )
@@ -24,7 +28,8 @@ class ResumeHandler:
         try:
             content_type = self._classify_content(original_text)
             summary = await self._generate_openai_summary(original_text, content_type)
-            await update.message.reply_text(summary, parse_mode="Markdown")
+            for chunk in self._split_message(summary):
+                await update.message.reply_text(chunk, parse_mode="Markdown")
         except Exception as e:
             await update.message.reply_text(f"❌ Error al generar resumen: {str(e)}")
 
@@ -33,9 +38,13 @@ class ResumeHandler:
 
         if not url:
             await update.message.reply_text(
-                "🌐 *Instrucciones para /resumen_url:*\n\n"
-                "Envía el comando seguido de la URL que deseas resumir:\n"
-                "Ejemplo:\n"
+                "🌐 *Instrucciones para /resumen_url:*
+
+"
+                "Envía el comando seguido de la URL que deseas resumir:
+"
+                "Ejemplo:
+"
                 "`/resumen_url https://ejemplo.com/articulo-cripto`",
                 parse_mode="Markdown"
             )
@@ -47,11 +56,21 @@ class ResumeHandler:
             summary = await self._generate_openai_summary(clean_text, content_type)
             fuente = self._get_domain(url)
             full_message = f"🔗 **Resumen de {title}**\n\n{summary}\n\n🌐 Fuente: {fuente}"
-            if len(full_message) > 4000:
-                full_message = full_message[:3990] + "..."
-            await update.message.reply_text(full_message, parse_mode="Markdown", disable_web_page_preview=True)
+            for chunk in self._split_message(full_message):
+                await update.message.reply_text(chunk, parse_mode="Markdown", disable_web_page_preview=True)
         except Exception as e:
             await update.message.reply_text(f"❌ Error al procesar URL: {str(e)}")
+
+    def _split_message(self, text: str, limit: int = 4000) -> list[str]:
+        chunks = []
+        while len(text) > limit:
+            split_at = text.rfind('\n', 0, limit)
+            if split_at == -1:
+                split_at = limit
+            chunks.append(text[:split_at])
+            text = text[split_at:].lstrip()
+        chunks.append(text)
+        return chunks
 
     def _classify_content(self, text: str) -> Literal['blockchain', 'finanzas', 'tecnología', 'general']:
         crypto_terms = ['blockchain', 'token', 'nft', 'web3', 'defi', 'staking', 'smart contract', 'wallet']
@@ -79,7 +98,7 @@ Aspectos financieros del token como utilidad, emisión, valor o circulación
 🛠️ Mecánicas
 Mecanismos de funcionamiento, tecnología o contratos inteligentes
 
-📅 Roadmap
+🗓️ Roadmap
 Fechas clave, hitos futuros o versiones planificadas
 
 🎯 Beneficios
@@ -122,8 +141,7 @@ Usa viñetas y encabezados solo si es necesario"""
             "📌 Resumen generado automáticamente."
         )
 
-        respuesta = await generar_respuesta_ia(prompt, "Usuario")
-        return respuesta[:3990] + "..." if len(respuesta) > 4000 else respuesta
+        return await generar_respuesta_ia(prompt, "Usuario")
 
     async def _fetch_web_content(self, url: str) -> tuple:
         headers = {
