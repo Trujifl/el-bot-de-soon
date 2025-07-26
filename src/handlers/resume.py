@@ -71,23 +71,60 @@ class ResumeHandler:
     async def _generate_openai_summary(self, text: str, tipo: str) -> str:
         if tipo == 'blockchain':
             instrucciones = (
-                "- 🔹 Proyecto\n- 💰 Tokenomics\n- 🛠️ Mecánicas\n- 📅 Roadmap\n- 🎯 Beneficios"
+                "🔹 Proyecto
+- Breve descripción del proyecto
+
+💰 Tokenomics
+- Datos sobre el suministro, utilidad o beneficios del token
+
+🛠️ Mecánicas
+- Cómo funciona el sistema, interacciones clave, uso de tecnología
+
+📅 Roadmap
+- Fechas, etapas futuras, lanzamientos
+
+🎯 Beneficios
+- Incentivos, airdrops, recompensas, ventajas del ecosistema"
             )
         elif tipo == 'finanzas':
             instrucciones = (
-                "- 📈 Concepto\n- 💵 Montos\n- 📊 Riesgos\n- 🔄 Tendencia"
+                "📈 Concepto
+- Define el tema financiero principal
+
+💵 Montos
+- Números, tasas o inversiones destacadas
+
+📊 Riesgos
+- Volatilidad, factores externos, vulnerabilidades
+
+🔄 Tendencia
+- Movimiento reciente o proyectado en el mercado"
             )
         elif tipo == 'tecnología':
             instrucciones = (
-                "- 🤖 Tecnología\n- 🚀 Innovación\n- 🛠️ Funciones\n- 📱 Aplicación"
+                "🤖 Tecnología
+- ¿Qué tecnología se describe?
+
+🚀 Innovación
+- ¿Qué la hace novedosa?
+
+🛠️ Funciones
+- ¿Qué puede hacer exactamente?
+
+📱 Aplicación
+- ¿Dónde se usa? ¿Cómo se integra?"
             )
         else:
-            instrucciones = "Resume en español extrayendo las ideas más relevantes del texto. Usa viñetas (•)."
+            instrucciones = (
+                "🔹 Puntos clave
+- Lista clara de ideas centrales con viñetas
+- Sin repeticiones ni relleno"
+            )
 
         prompt = (
-            "Eres un asistente que genera resúmenes en español con estilo tipo whitepaper.\n"
-            f"El contenido es de tipo '{tipo}'. Resume el siguiente texto en español, usando el siguiente formato:\n\n"
-            f"{instrucciones}\n\n"
+            "Eres un asistente que genera resúmenes en español con estilo visual agradable.\n"
+            "Usa emojis como encabezados y subtítulos claros. Separa cada bloque con líneas en blanco.\n"
+            f"Tipo de contenido: {tipo}. Estructura así:\n\n{instrucciones}\n\n"
             f"Texto a resumir:\n{text}\n\n"
             "📌 Resumen generado automáticamente."
         )
