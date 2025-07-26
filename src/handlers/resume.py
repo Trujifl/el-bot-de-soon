@@ -114,9 +114,12 @@ class ResumeHandler:
 - Sin repeticiones ni relleno"""
 
         prompt = (
-            "Eres un asistente que genera resúmenes en español con estilo visual agradable.\n"
-            "Usa emojis como encabezados y subtítulos claros. Separa cada bloque con líneas en blanco.\n"
-            f"Tipo de contenido: {tipo}. Estructura así:\n\n{instrucciones}\n\n"
+            "Eres un asistente que redacta resúmenes visuales y estructurados en español. "
+            "Usa emojis llamativos como encabezados y viñetas según el contexto del contenido "
+            "(por ejemplo, 💡 para ideas, 🎮 para juegos, 📊 para finanzas, 🔹 para bloques generales). "
+            "Organiza el texto en bloques con títulos claros, separados por líneas en blanco. "
+            "Adapta el estilo a la temática sin perder profesionalismo.\n\n"
+            f"Tipo de contenido: {tipo}. Estructura sugerida:\n\n{instrucciones}\n\n"
             f"Texto a resumir:\n{text}\n\n"
             "📌 Resumen generado automáticamente."
         )
