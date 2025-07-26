@@ -110,14 +110,14 @@ Para qué sirve y cómo funciona
 Casos de uso o entornos donde se implementa"""
         else:
             instrucciones = """🔹 Puntos clave
-Resumen general con ideas principales y conceptos destacados\nUsa viñetas y encabezados solo si es necesario"""
+Resumen general con ideas principales y conceptos destacados
+Usa viñetas y encabezados solo si es necesario"""
 
         prompt = (
-            "Eres un asistente profesional que redacta resúmenes temáticos con formato visual estructurado.\n"
-            "Tu respuesta debe estar en español, contener encabezados con emojis temáticos\n"
-            "(como 🔹, 💰, 📊, 🎯, 🛠️, etc.) según la categoría, y tener líneas vacías entre secciones.\n"
-            "Evita repetir información o inventar secciones adicionales.\n"
-            "Sigue estrictamente la siguiente estructura por tipo:\n\n"
+            "Eres un asistente profesional que redacta resúmenes temáticos con formato visual estructurado. "
+            "Tu respuesta debe estar en español y seguir exactamente este formato, usando encabezados con emojis. "
+            "No agregues introducciones ni conclusiones. Si alguna sección no aplica, indica 'No especificado'. "
+            "Cada sección debe estar separada por una línea en blanco. \n\n"
             f"{instrucciones}\n\nTexto a resumir:\n{text}\n\n"
             "📌 Resumen generado automáticamente."
         )
