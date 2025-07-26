@@ -27,6 +27,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Verificación directa por texto, ignorando si no comienza con @
+    if not update.message or not update.message.text:
+        return
+
+    bot_username = (await context.bot.get_me()).username.lower()
+    if not update.message.text.strip().lower().startswith(f"@{bot_username}"):
+        return
+
     user_msg = update.message.text.lower()
     user_name = update.effective_user.first_name
     ctx = context.chat_data.get("cripto_ctx", {})
@@ -38,8 +46,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if cripto:
             try:
                 cripto_id = "bitcoin" if cripto in ["btc", "bitcoin"] else \
-                           "ethereum" if cripto in ["eth", "ethereum"] else \
-                           "solana" if cripto in ["sol", "solana"] else cripto
+                            "ethereum" if cripto in ["eth", "ethereum"] else \
+                            "solana" if cripto in ["sol", "solana"] else cripto
 
                 datos = CoinGeckoAPI.obtener_precio(cripto_id)
                 ctx[cripto] = datos
