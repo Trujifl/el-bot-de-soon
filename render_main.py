@@ -63,6 +63,15 @@ async def webhook():
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
+@app.route('/set_webhook')
+def set_webhook():
+    try:
+        webhook_url = f"https://el-bot-de-soon.onrender.com/webhook"
+        application.bot.set_webhook(webhook_url)
+        return f"Webhook establecido en: {webhook_url}", 200
+    except Exception as e:
+        return f"Error al establecer webhook: {e}", 500
+
 if __name__ == '__main__':
     setup_handlers()
     import asyncio
