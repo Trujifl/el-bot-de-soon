@@ -45,8 +45,9 @@ class ResumeHandler:
             title, clean_text = await self._fetch_web_content(url)
             content_type = self._classify_content(clean_text)
             summary = await self._generate_openai_summary(clean_text, content_type)
+            fuente = self._get_domain(url)
             await update.message.reply_text(
-                f"🔗 **Resumen de {title}**\n\n{summary}\n\n🌐 Fuente: {self._get_domain(url)}",
+                f"🔗 **Resumen de {title}**\n\n{summary}\n\n🌐 Fuente: {fuente}",
                 parse_mode="Markdown",
                 disable_web_page_preview=True
             )
