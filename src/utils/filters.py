@@ -1,17 +1,14 @@
-# src/utils/filters.py
+
 from telegram import Message, Update
 from telegram.ext.filters import BaseFilter
 from src.config import GROUP_ID, TOPIC_ID
 
 class MentionedBotFilter(BaseFilter):
     def filter(self, message: Message) -> bool:
-        if not message.entities:
+        if not message.text:
             return False
-        return any(
-            entity.type == "mention" and
-            message.text[entity.offset:entity.offset + entity.length].lower() == f"@{message.bot.username.lower()}"
-            for entity in message.entities
-        )
+        bot_username = message.bot.username.lower()
+        return message.text.strip().lower().startswith(f"@{bot_username}")
 
     def __call__(self, update: Update) -> bool:
         return update.message is not None and self.filter(update.message)
