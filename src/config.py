@@ -3,7 +3,6 @@ import logging
 import random
 from pathlib import Path
 
-# Configuración de logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -14,19 +13,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Carga de variables de entorno
 env_path = Path(__file__).parent.parent / '.env'
 if env_path.exists():
     from dotenv import load_dotenv
     load_dotenv(env_path)
 
-# Configuración esencial
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+COINMARKETCAP_API_KEY = os.getenv("COINMARKETCAP_API_KEY")
 ADMIN_IDS = [int(id.strip()) for id in os.getenv("TELEGRAM_ADMIN_IDS", "").split(",") if id.strip()]
 CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID")
+GROUP_ID = -1002348706229
+TOPIC_ID = 8183
+POST_CHANNEL_ID = -1002615396578
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Clases de configuración
 class BotMeta:
     NAME = "SoonBot"
     VERSION = "2.0"
@@ -35,8 +36,7 @@ class BotMeta:
 
 class BotPersonality:
     TONO = "Profesional pero cercano"
-    CRIPTOS_COMUNES = ["bitcoin", "ethereum", "binancecoin", "solana"]
-    
+    CRIPTOS_COMUNES = ["bitcoin", "ethereum", "binancecoin", "solana"] 
     PERSONALIDAD_IA = {
         "role": "system",
         "content": (
@@ -74,6 +74,5 @@ class APIConfig:
         "Accept": "application/json"
     }
 
-# Validaciones
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN no está configurado en .env")
