@@ -3,13 +3,19 @@ from telegram.ext import ContextTypes
 from src.config import logger
 
 class PostHandler:
-    CHANNEL_ID = -1002348706229  # ID correcto con prefijo para bots
-    TOPIC_ID = 8223              # ID del topic en el canal
+    CHANNEL_ID = -1002348706229  
+    TOPIC_ID = 8223              
 
     async def handle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message
         if not message:
             return
+
+        await message.reply_text(
+            f"🧪 chat_id: `{update.effective_chat.id}`\n"
+            f"🧪 thread_id: `{message.message_thread_id}`",
+            parse_mode="Markdown"
+        )
 
         context.user_data["pending_post"] = message.text
 
@@ -36,7 +42,7 @@ class PostHandler:
                 try:
                     await context.bot.send_message(
                         chat_id=self.CHANNEL_ID,
-                        message_thread_id=self.TOPIC_ID,
+                        message_thread_id=self.TOPIC_ID,  
                         text=content
                     )
                     await query.edit_message_text("✅ Post publicado correctamente.")
@@ -48,3 +54,4 @@ class PostHandler:
 
         elif query.data == "cancel_post_":
             await query.edit_message_text("❌ Post cancelado.")
+
