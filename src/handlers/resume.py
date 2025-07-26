@@ -23,7 +23,7 @@ class ResumeHandler:
 
         try:
             content_type = self._classify_content(original_text)
-            summary = await self._generate_openai_summary(original_text, content_type)
+            summary = self._generate_text_summary(original_text, content_type)
             await update.message.reply_text(summary, parse_mode="Markdown")
         except Exception as e:
             await update.message.reply_text(f"❌ Error al generar resumen: {str(e)}")
@@ -44,7 +44,7 @@ class ResumeHandler:
         try:
             title, clean_text = await self._fetch_web_content(url)
             content_type = self._classify_content(clean_text)
-            summary = await self._generate_openai_summary(clean_text, content_type)
+            summary = self._generate_url_summary(title, clean_text, content_type)
             await update.message.reply_text(
                 f"🔗 **Resumen de {title}**\n\n{summary}\n\n🌐 Fuente: {self._get_domain(url)}",
                 parse_mode="Markdown",
@@ -68,61 +68,46 @@ class ResumeHandler:
             return 'tecnología'
         return 'general'
 
-    async def _generate_openai_summary(self, text: str, tipo: str) -> str:
-        if tipo == 'blockchain':
-            instrucciones = """🔹 Proyecto
-Breve descripción general del proyecto
+    def _generate_text_summary(self, text: str, content_type: str) -> str:
+        if content_type == 'blockchain':
+            return self._crypto_summary(text)
+        elif content_type == 'finanzas':
+            return self._finance_summary(text)
+        elif content_type == 'tecnología':
+            return self._tech_summary(text)
+        return self._general_summary(text)
 
-💰 Tokenomics
-Aspectos financieros del token como utilidad, emisión, valor o circulación
+    def _crypto_summary(self, text: str) -> str:
+        components = {
+            '🔹 Proyecto': self._extract_project_name(text),
+            '💰 Tokenomics': self._extract_pattern(r'\$[\d,]+|[\d,]+% APY|\d+ tokens?', text),
+            '🛠️ Mecánicas': self._extract_pattern(r'staking|minteo|gobernanza|NFT|DAO|DeFi|smart contract', text),
+            '📅 Roadmap': self._extract_pattern(r'Temporada \d+|Q\d+ \d{4}|\d{4}-\d{2}', text),
+            '🎯 Beneficios': self._extract_pattern(r'recompensas?|beneficios|ventajas|airdrops?|rewards', text)
+        }
+        return self._format_components(components)
 
-🛠️ Mecánicas
-Mecanismos de funcionamiento, tecnología o contratos inteligentes
+    def _finance_summary(self, text: str) -> str:
+        components = {
+            '📈 Concepto': self._extract_pattern(r'mercado \w+|inversión en \w+|\w+ financiero', text),
+            '💵 Montos': self._extract_pattern(r'\$[\d,]+|[\d,]+% retorno|[\d,]+ acciones', text),
+            '📊 Riesgos': self._extract_pattern(r'riesgos? de \w+|volatilidad|incertidumbre', text),
+            '🔄 Tendencia': self._extract_pattern(r'crecimiento|caída|estabilidad|tendencia \w+', text)
+        }
+        return self._format_components(components)
 
-📅 Roadmap
-Fechas clave, hitos futuros o versiones planificadas
+    def _tech_summary(self, text: str) -> str:
+        components = {
+            '🤖 Tecnología': self._extract_pattern(r'IA|blockchain|machine learning|IoT|cloud \w+', text),
+            '🚀 Innovación': self._extract_pattern(r'revolución|disruptivo|nuevo paradigma', text),
+            '🛠️ Funciones': self._extract_pattern(r'\w+ en tiempo real|algoritmo de \w+|\d+x más rápido', text),
+            '📱 Aplicación': self._extract_pattern(r'app móvil|plataforma \w+|integración con', text)
+        }
+        return self._format_components(components)
 
-🎯 Beneficios
-Ventajas, recompensas, incentivos o atractivo para la comunidad"""
-        elif tipo == 'finanzas':
-            instrucciones = """📈 Concepto
-Tema principal y su aplicación
-
-💵 Montos
-Datos numéricos relevantes o condiciones económicas
-
-📊 Riesgos
-Factores de volatilidad, incertidumbre o advertencias
-
-🔄 Tendencia
-Dirección reciente o proyectada del fenómeno financiero"""
-        elif tipo == 'tecnología':
-            instrucciones = """🤖 Tecnología
-Nombre y naturaleza de la innovación
-
-🚀 Innovación
-Qué la hace diferente o disruptiva
-
-🛠️ Funciones
-Para qué sirve y cómo funciona
-
-📱 Aplicación
-Casos de uso o entornos donde se implementa"""
-        else:
-            instrucciones = """🔹 Puntos clave
-Resumen general con ideas principales y conceptos destacados
-Usa viñetas y encabezados solo si es necesario"""
-
-        prompt = (
-            "Eres un asistente profesional que redacta resúmenes temáticos con formato visual estructurado. "
-            "Tu respuesta debe estar en español y seguir exactamente este formato, usando encabezados con emojis. "
-            "No agregues introducciones ni conclusiones. Si alguna sección no aplica, indica 'No especificado'. "
-            "Cada sección debe estar separada por una línea en blanco. \n\n"
-            f"{instrucciones}\n\nTexto a resumir:\n{text}\n\n"
-            "📌 Resumen generado automáticamente."
-        )
-
-        return await generar_respuesta_ia(prompt, "Usuario")
+    def _general_summary(self, text: str) -> str:
+        key_sentences = re.findall(r'([A-Z][^.!?]*[.!?])', text)[:5]
+        return "📌 Puntos clave:\n\n" + "\n".join(f"• {sentence.strip()}" for sentence in key_sentences)
 
     async def _fetch_web_content(self, url: str) -> tuple:
         headers = {
@@ -146,6 +131,70 @@ Usa viñetas y encabezados solo si es necesario"""
             return title, "\n".join(content_blocks[:15])
         except Exception as e:
             raise Exception(f"No se pudo procesar la URL: {str(e)}")
+
+    def _generate_url_summary(self, title: str, text: str, content_type: str) -> str:
+        if content_type == 'blockchain':
+            return self._crypto_url_summary(title, text)
+        elif content_type == 'finanzas':
+            return self._finance_url_summary(title, text)
+        elif content_type == 'tecnología':
+            return self._tech_url_summary(title, text)
+        return self._general_url_summary(title, text)
+
+    def _crypto_url_summary(self, title: str, text: str) -> str:
+        components = {
+            '📌 Título': title,
+            '💰 Tokenomics': self._extract_pattern(r'\$[\d,]+|[\d,]+% APY|\d+ tokens?', text),
+            '🔄 Mecánicas': self._extract_pattern(r'staking|minteo|gobernanza|NFT|DAO|DeFi', text),
+            '🚀 Actualización': self._extract_pattern(r'lanzamiento|Temporada \d+|Q\d+ \d{4}', text),
+            '🌐 Casos de Uso': self._extract_pattern(r'GameFi|Web3|Metaverso|DEX', text)
+        }
+        return self._format_url_components(components)
+
+    def _finance_url_summary(self, title: str, text: str) -> str:
+        components = {
+            '📌 Título': title,
+            '📊 Mercado': self._extract_pattern(r'mercado \w+|índice \w+|sector \w+', text),
+            '📈 Análisis': self._extract_pattern(r'tendencia alcista|presión bajista|soporte en', text),
+            '💡 Recomendación': self._extract_pattern(r'invertir en|evitar \w+|mantener posición', text)
+        }
+        return self._format_url_components(components)
+
+    def _tech_url_summary(self, title: str, text: str) -> str:
+        components = {
+            '📌 Título': title,
+            '🤖 Tecnología': self._extract_pattern(r'IA generativa|\d+nm chip|computación cuántica', text),
+            '🔄 Impacto': self._extract_pattern(r'revolucionar \w+|cambiar la industria', text),
+            '📱 Aplicación': self._extract_pattern(r'app móvil|plataforma \w+|integración con', text)
+        }
+        return self._format_url_components(components)
+
+    def _general_url_summary(self, title: str, text: str) -> str:
+        key_points = re.findall(r'([A-Z][^.!?]*[.!?])', text)[:5]
+        return f"📌 {title}\n\n" + "🔹 " + "\n🔹 ".join(key_points[:5])
+
+    def _extract_project_name(self, text: str) -> str:
+        matches = re.findall(r'\b([A-Z][a-zA-Z0-9]+)\b', text)
+        return matches[0] if matches else "Proyecto"
+
+    def _extract_pattern(self, pattern: str, text: str) -> str:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        unique_matches = list(dict.fromkeys(matches))[:3]
+        return "\n".join(f"- {m}" for m in unique_matches) if unique_matches else "No especificado"
+
+    def _format_components(self, components: dict) -> str:
+        return "\n\n".join(
+            f"{key}:\n{value}"
+            for key, value in components.items()
+            if value != "No especificado"
+        ) + "\n\n📌 Resumen generado automáticamente"
+
+    def _format_url_components(self, components: dict) -> str:
+        return "\n\n".join(
+            f"{key}:\n{value}"
+            for key, value in components.items()
+            if value and value != "No especificado"
+        ) + "\n\n📌 Resumen automático"
 
     def _get_domain(self, url: str) -> str:
         domain = urlparse(url).netloc
