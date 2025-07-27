@@ -38,18 +38,6 @@ async def set_commands():
     ]
     await application.bot.set_my_commands(commands)
 
-    try:
-        webhook_url = os.getenv("WEBHOOK_URL", "https://el-bot-de-soon.onrender.com/webhook")
-        await application.bot.set_webhook(webhook_url)
-        logger.info(f"Webhook registrado correctamente: {webhook_url}")
-    except Exception as e:
-        logger.error(f"Error al establecer el webhook: {e}")
-
-    try:
-        await application.bot.send_message(chat_id=os.getenv("ADMIN_ID", None), text="✅ Bot iniciado correctamente y webhook registrado.")
-    except Exception:
-        pass
-
 def setup_handlers():
     setup_base_handlers(application)
     filtro = MentionedBotFilter() & TopicFilter()
@@ -75,17 +63,7 @@ async def webhook():
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
-@app.route('/set_webhook')
-def set_webhook():
-    try:
-        webhook_url = os.getenv("WEBHOOK_URL", "https://el-bot-de-soon.onrender.com/webhook")
-        application.bot.set_webhook(webhook_url)
-        return f"Webhook establecido en: {webhook_url}", 200
-    except Exception as e:
-        return f"Error al establecer webhook: {e}", 500
-
 if __name__ == '__main__':
     setup_handlers()
-    import asyncio
-    asyncio.run(set_commands())
+    application.run_polling()
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
