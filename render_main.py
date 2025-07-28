@@ -1,21 +1,14 @@
 from flask import Flask, request
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
-    MessageHandler,
-    filters,
     CallbackQueryHandler,
     ContextTypes
 )
-from telegram import BotCommand
 import os
-import logging
-from src.config import (
-    TELEGRAM_TOKEN as TOKEN,
-    logger,
-    BotMeta
-)
+import asyncio
+from src.config import TELEGRAM_TOKEN as TOKEN, logger, BotMeta
 from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
@@ -23,9 +16,9 @@ from src.handlers.resume import ResumeHandler
 from src.utils.filters import MentionedBotFilter, TopicFilter
 
 app = Flask(__name__)
+application = Application.builder().token(TOKEN).build()
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
-application = Application.builder().token(TOKEN).build()
 
 async def set_commands():
     commands = [
@@ -52,7 +45,7 @@ def setup_handlers():
 def webhook():
     try:
         update = Update.de_json(request.json, application.bot)
-        asyncio.run(application.update_queue.put(update))
+        application.update_queue.put_nowait(update)
         logger.info(f"[{BotMeta.NAME}] Update procesado")
         return "OK", 200
     except Exception as e:
@@ -64,14 +57,14 @@ def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
 if __name__ == '__main__':
-    import asyncio
     setup_handlers()
-    
+
     async def startup():
         await set_commands()
-        webhook_url = f"https://el-bot-de-soon.onrender.com/webhook"
-        await application.bot.set_webhook(webhook_url)
+        webhook_url = os.getenv("WEBHOOK_URL", "https://el-bot-de-soon.onrender.com/webhook")
+        await application.bot.set_webhook(url=webhook_url)
+        logger.info(f"🔗 Webhook establecido en: {webhook_url}")
 
     asyncio.run(startup())
-    
+
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
