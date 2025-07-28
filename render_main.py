@@ -1,19 +1,19 @@
+from flask import Flask
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
-    ContextTypes,
     filters
 )
 from telegram import BotCommand
 import asyncio
+import os
 from src.config import TELEGRAM_TOKEN as TOKEN, logger, BotMeta
 from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
 from src.handlers.post import PostHandler
 from src.handlers.resume import ResumeHandler
 from src.utils.filters import MentionedBotFilter, TopicFilter
-from flask import Flask
 
 app = Flask(__name__)
 
@@ -21,10 +21,9 @@ app = Flask(__name__)
 def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
+application = Application.builder().token(TOKEN).build()
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
-
-application = Application.builder().token(TOKEN).build()
 
 async def set_commands():
     commands = [
@@ -51,4 +50,4 @@ if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     loop.create_task(set_commands())
     loop.create_task(application.run_polling())
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
