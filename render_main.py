@@ -49,10 +49,10 @@ def setup_handlers():
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
 
 @app.route('/webhook', methods=['POST'])
-async def webhook():
+def webhook():
     try:
         update = Update.de_json(request.json, application.bot)
-        await application.update_queue.put(update)
+        asyncio.run(application.update_queue.put(update))
         logger.info(f"[{BotMeta.NAME}] Update procesado")
         return "OK", 200
     except Exception as e:
