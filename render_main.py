@@ -64,6 +64,14 @@ def health_check():
     return f"{BotMeta.NAME} está activo ✅", 200
 
 if __name__ == '__main__':
+    import asyncio
     setup_handlers()
-    application.run_polling()
+    
+    async def startup():
+        await set_commands()
+        webhook_url = f"https://el-bot-de-soon.onrender.com/webhook"
+        await application.bot.set_webhook(webhook_url)
+
+    asyncio.run(startup())
+    
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
