@@ -7,7 +7,6 @@ from telegram.ext import (
     ContextTypes
 )
 import os
-import asyncio
 from src.config import TELEGRAM_TOKEN as TOKEN, logger, BotMeta
 from src.handlers.base import setup_base_handlers
 from src.handlers.crypto import precio_cripto
@@ -20,17 +19,6 @@ application = Application.builder().token(TOKEN).build()
 post_handler = PostHandler()
 resume_handler = ResumeHandler()
 
-async def set_commands():
-    commands = [
-        BotCommand("start", "Inicia el bot"),
-        BotCommand("help", "Muestra ayuda"),
-        BotCommand("precio", "Consulta precio de cripto"),
-        BotCommand("post", "Crea un post para el canal"),
-        BotCommand("resumen_texto", "Resume un texto en español"),
-        BotCommand("resumen_url", "Resume una página web en español")
-    ]
-    await application.bot.set_my_commands(commands)
-
 def setup_handlers():
     setup_base_handlers(application)
     filtro = MentionedBotFilter() & TopicFilter()
@@ -40,6 +28,10 @@ def setup_handlers():
     application.add_handler(CommandHandler("resumen_texto", resume_handler.handle_resumen_texto, filters=filtro))
     application.add_handler(CommandHandler("resumen_url", resume_handler.handle_resumen_url, filters=filtro))
     application.add_handler(CallbackQueryHandler(post_handler.handle_confirmation, pattern="^(confirm|cancel)_post_"))
+
+@app.route('/')
+def health_check():
+    return f"{BotMeta.NAME} está activo ✅", 200
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
@@ -52,19 +44,21 @@ def webhook():
         logger.error(f"Error en webhook: {e}")
         return "Error", 500
 
-@app.route('/')
-def health_check():
-    return f"{BotMeta.NAME} está activo ✅", 200
-
 if __name__ == '__main__':
-    setup_handlers()
+    import asyncio
 
     async def startup():
-        await set_commands()
-        webhook_url = os.getenv("WEBHOOK_URL", "https://el-bot-de-soon.onrender.com/webhook")
-        await application.bot.set_webhook(url=webhook_url)
-        logger.info(f"🔗 Webhook establecido en: {webhook_url}")
+        await application.bot.set_webhook("https://el-bot-de-soon.onrender.com/webhook")
+        commands = [
+            BotCommand("start", "Inicia el bot"),
+            BotCommand("help", "Muestra ayuda"),
+            BotCommand("precio", "Consulta precio de cripto"),
+            BotCommand("post", "Crea un post para el canal"),
+            BotCommand("resumen_texto", "Resume un texto en español"),
+            BotCommand("resumen_url", "Resume una página web en español")
+        ]
+        await application.bot.set_my_commands(commands)
 
+    setup_handlers()
     asyncio.run(startup())
-
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
